@@ -131,7 +131,7 @@ GameObject:
   - component: {fileID: 1328442207}
   - component: {fileID: 1328442209}
   m_Layer: 0
-  m_Name: Panel_BackgroundCamera
+  m_Name: Main Camera
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -258,7 +258,7 @@ GameObject:
   - component: {fileID: 2040441388}
   - component: {fileID: 2040441387}
   m_Layer: 0
-  m_Name: Panel_GameBootstrap
+  m_Name: GameBootstrap
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0

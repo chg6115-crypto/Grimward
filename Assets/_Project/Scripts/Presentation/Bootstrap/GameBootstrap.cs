@@ -1,4 +1,6 @@
 using Grimward.Domain.Config;
+using Grimward.Domain.Characters;
+using Grimward.Domain.Combat;
 using Grimward.Domain.Core;
 using Grimward.Domain.Map;
 using Grimward.Domain.Exploration;
@@ -28,7 +30,8 @@ namespace Grimward.Presentation.Bootstrap
             var errors = new MapValidator(config).Validate(map);
             if (errors.Count != 0) throw new System.InvalidOperationException(string.Join("\n", errors));
             State = new ExplorationState(map, config, new TravelTimeCalculator(config),
-                new FogOfWar(), new PathEventResolver(config, random), new ReturnPathFinder(config));
+                new FogOfWar(), new PathEventResolver(config, random), new ReturnPathFinder(config),
+                new Adventurer(config), new BattleFactory(config, random, new EnemyFactory(config, random)));
             var font = uiFont;
             if (font == null)
             {

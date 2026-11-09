@@ -36,14 +36,14 @@ namespace Grimward.Editor
                     throw new System.InvalidOperationException("현재 씬을 저장한 뒤 다시 실행하세요.");
                 var mode = string.IsNullOrEmpty(active.path) ? NewSceneMode.Single : NewSceneMode.Additive;
                 var scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, mode);
-                var cameraObject = new GameObject("Panel_BackgroundCamera", typeof(Camera));
+                var cameraObject = new GameObject("Main Camera", typeof(Camera));
                 SceneManager.MoveGameObjectToScene(cameraObject, scene);
                 var camera = cameraObject.GetComponent<Camera>();
                 camera.orthographic = true;
                 camera.clearFlags = CameraClearFlags.SolidColor;
                 camera.backgroundColor = Color.black;
                 camera.cullingMask = 0;
-                var root = new GameObject("Panel_GameBootstrap");
+                var root = new GameObject("GameBootstrap");
                 SceneManager.MoveGameObjectToScene(root, scene);
                 var bootstrap = root.AddComponent<GameBootstrap>();
                 var serialized = new SerializedObject(bootstrap);

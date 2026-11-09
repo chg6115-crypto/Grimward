@@ -7,7 +7,7 @@ namespace Grimward.Domain.Exploration
         {
             var node = map.Node(nodeId);
             node.IsDiscovered = true;
-            node.IsVisited = true;
+
             foreach (int edgeId in node.EdgeIds)
             {
                 var edge = map.Edge(edgeId);

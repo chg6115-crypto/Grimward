@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Grimward.Domain.Config;
+using Grimward.Domain.Combat;
 using Grimward.Domain.Core;
 using Grimward.Domain.Map;
 using Grimward.Domain.Exploration;
@@ -17,14 +18,12 @@ namespace Grimward.Tests
             public int Calls { get; private set; }
             public ConstantRandom(double value) { this.value = value; }
             public double NextDouble() { Calls++; return value; }
+            public int NextInt(int minInclusive, int maxInclusive) => minInclusive;
         }
 
         private static ExplorationState Create(MapData map = null, BalanceConfig config = null, IRandomSource random = null)
         {
-            config = config ?? new BalanceConfig();
-            return new ExplorationState(map ?? new FixedMapProvider().CreateMap(), config,
-                new TravelTimeCalculator(config), new FogOfWar(),
-                new PathEventResolver(config, random ?? new ConstantRandom(.99)), new ReturnPathFinder(config));
+            return TestWorld.Create(config ?? new BalanceConfig(), random ?? new ConstantRandom(.99), map ?? TestWorld.MovementMap());
         }
 
         [Test]
@@ -130,20 +129,24 @@ namespace Grimward.Tests
         }
 
         [Test]
-        public void BattleAndTreasure_RemainIncomplete_AndCanBeLeft()
+        public void UnfinishedBattleRequiresFlee_AndTreasureCanBeLeft()
         {
-            var state = Create();
-            var logs = new List<string>(); state.Logged += logs.Add;
-            state.TryMove(1); state.TryMove(3); state.TryMove(5);
+            var state = TestWorld.Create();
+            state.TryMove(1);
+            state.TryMove(3);
             Assert.That(state.Map.Node(3).IsVisited, Is.True);
             Assert.That(state.Map.Node(3).IsEventCompleted, Is.False);
-            Assert.That(state.Map.Node(5).IsVisited, Is.True);
-            Assert.That(state.Map.Node(5).IsEventCompleted, Is.False);
-            Assert.That(logs, Does.Contain("전투 발생 — M2에서 구현"));
+            Assert.That(state.TryMove(5), Is.False);
+            Assert.That(state.TryBattleAction(BattleAction.Flee), Is.True);
+            Assert.That(state.CurrentNodeId, Is.EqualTo(1));
+            var treasure = Create();
+            var logs = new List<string>(); treasure.Logged += logs.Add;
+            treasure.TryMove(1); treasure.TryMove(3); treasure.TryMove(5);
+            Assert.That(treasure.Map.Node(5).IsVisited, Is.True);
+            Assert.That(treasure.Map.Node(5).IsEventCompleted, Is.False);
             Assert.That(logs, Does.Contain("보물 발견 — M3에서 구현"));
-            Assert.That(state.TryMove(3), Is.True);
+            Assert.That(treasure.TryMove(3), Is.True);
         }
-
         [Test]
         public void Fog_RevealsOnlyConnectedNodesAndEdges()
         {
@@ -201,16 +204,16 @@ namespace Grimward.Tests
             var state = Create(config: new BalanceConfig { GameStartMinute = minute }, random: random);
             var logs = new List<string>(); state.Logged += logs.Add;
             state.TryMove(1);
-            Assert.That(logs.Contains("매복 발생 — M2에서 구현"), Is.EqualTo(expected));
+            Assert.That(state.Battle != null, Is.EqualTo(expected));
             Assert.That(random.Calls, Is.EqualTo(1));
-            Assert.That(state.CurrentNodeId, Is.EqualTo(1));
-            Assert.That(state.Time.MinuteOfDay, Is.EqualTo(minute + 60));
+            Assert.That(state.CurrentNodeId, Is.EqualTo(expected ? 0 : 1));
+            Assert.That(state.Time.MinuteOfDay, Is.EqualTo(expected ? minute : minute + 60));
         }
 
         [Test]
         public void AutoReturn_ExecutesEverySegment_WithRevisitTimeAndRolls()
         {
-            var random = new ConstantRandom(0);
+            var random = new ConstantRandom(.99);
             var state = Create(random: random);
             var logs = new List<string>(); state.Logged += logs.Add;
             state.TryMove(1); state.TryMove(2);
@@ -219,7 +222,7 @@ namespace Grimward.Tests
             Assert.That(state.CurrentNodeId, Is.EqualTo(0));
             Assert.That(state.Time.MinuteOfDay, Is.EqualTo(540));
             Assert.That(random.Calls, Is.EqualTo(4));
-            Assert.That(logs.Count(s => s == "매복 발생 — M2에서 구현"), Is.EqualTo(4));
+            Assert.That(logs.Count(s => s.Contains("번 노드 도착")), Is.EqualTo(4));
             Assert.That(logs.Last(), Is.EqualTo("마을로 귀환 — M4에서 구현"));
             Assert.That(state.TryAutoReturn(), Is.True);
             Assert.That(random.Calls, Is.EqualTo(4));
@@ -241,7 +244,7 @@ namespace Grimward.Tests
         {
             var map = new MapData(2, new[] {
                 new NodeData(0,new HexCoord(-2,0),NodeEventType.Start),
-                new NodeData(1,new HexCoord(-1,0),NodeEventType.Battle),
+                new NodeData(1,new HexCoord(-1,0),NodeEventType.Treasure),
                 new NodeData(2,new HexCoord(0,0),NodeEventType.Empty),
                 new NodeData(3,new HexCoord(0,-1),NodeEventType.Empty),
                 new NodeData(4,new HexCoord(-1,-1),NodeEventType.Empty)
@@ -275,9 +278,12 @@ namespace Grimward.Tests
             state.TryMove(5); state.TryMove(6);
             Assert.That(state.FindReturnPath() != null, Is.EqualTo(expected));
             if (allow) Assert.That(state.FindReturnPath(), Is.EqualTo(new[] {6,5,3,1,0}));
-            var blocked = Create(config: new BalanceConfig { AllowIncompleteSafeNodesOnReturn = allow });
-            blocked.TryMove(1); blocked.TryMove(3); blocked.TryMove(5);
-            Assert.That(blocked.FindReturnPath(), Is.Null);
+            var blocked = new FixedMapProvider().CreateMap();
+            foreach (int id in new[] {0,1,3,5}) { blocked.Node(id).IsVisited = true; }
+            blocked.Node(0).CompleteEvent();
+            blocked.Node(1).CompleteEvent();
+            foreach (var edge in blocked.Edges) edge.IsTraversed = true;
+            Assert.That(new ReturnPathFinder(new BalanceConfig { AllowIncompleteSafeNodesOnReturn = allow }).Find(blocked,5), Is.Null);
         }
 
         [Test]
