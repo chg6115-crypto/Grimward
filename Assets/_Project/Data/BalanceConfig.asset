@@ -1,0 +1,36 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 05d5fc9d1cc6c2c4a85d27f96165a4b5, type: 3}
+  m_Name: BalanceConfig
+  m_EditorClassIdentifier: Grimward.Presentation::Grimward.Presentation.Config.BalanceConfigAsset
+  values:
+    FirstTraversalMinutes: 60
+    RevisitTraversalMinutes: 30
+    DayStartMinute: 360
+    NightStartMinute: 1200
+    GameStartDay: 1
+    GameStartMinute: 360
+    PathEventChanceDayFirst: 0.25
+    PathEventChanceDayRevisit: 0.05
+    PathEventChanceNightFirst: 0.4
+    PathEventChanceNightRevisit: 0.25
+    MapRadius: 2
+    ActiveNodeCount: 11
+    StartNodeCount: 1
+    BattleNodeCount: 6
+    TreasureNodeCount: 2
+    EmptyNodeCount: 2
+    MinCycleCount: 1
+    MaxCycleCount: 2
+    MaxPathDistance: 5
+    AllowIncompleteSafeNodesOnReturn: 0
+    DefaultSeed: 12345

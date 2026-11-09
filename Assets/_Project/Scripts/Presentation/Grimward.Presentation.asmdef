@@ -1,0 +1,10 @@
+{
+  "name": "Grimward.Presentation",
+  "rootNamespace": "Grimward",
+  "references": [
+    "Grimward.Domain",
+    "Unity.TextMeshPro",
+    "Unity.ugui",
+    "Unity.InputSystem"
+  ]
+}

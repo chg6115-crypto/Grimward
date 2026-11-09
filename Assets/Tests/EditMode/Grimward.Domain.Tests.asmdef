@@ -1,0 +1,13 @@
+{
+  "name": "Grimward.Domain.Tests",
+  "references": [
+    "Grimward.Domain"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "noEngineReferences": true
+}

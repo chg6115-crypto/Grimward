@@ -1,0 +1,5 @@
+{
+  "name": "Grimward.Domain",
+  "rootNamespace": "Grimward",
+  "noEngineReferences": true
+}
