@@ -1,0 +1,2246 @@
+{
+ "balance": {
+  "dayStartMinute": 360,
+  "nightStartMinute": 1200,
+  "wakeUpMinute": 360,
+  "hpBase": 16,
+  "hpPerVitality": 3,
+  "attackStrengthDivisor": 2,
+  "accuracyPerDexterity": 2,
+  "accuracyPerLevel": 2,
+  "dodgePerDexterity": 3,
+  "dodgePerceptionDivisor": 2,
+  "speedStatDivisor": 3,
+  "critBase": 0.03,
+  "critPerDexterity": 0.005,
+  "baseHitChance": 0.85,
+  "hitChanceMin": 0.05,
+  "hitChanceMax": 0.95,
+  "critMin": 0.05,
+  "critMultiplier": 1.5,
+  "damageReductionCap": 0.8,
+  "nightPartyAccuracyPenalty": 0.1,
+  "nightEnemyAccuracyBonus": 0.1,
+  "speedRollDie": 8,
+  "ranksPerSide": 4,
+  "itemsPerTurn": 1,
+  "fleeHpDamageRatio": 0.2,
+  "aiBuffChance": 0.3,
+  "aiHealThreshold": 0.5,
+  "defaultPerception": 3
+ },
+ "classes": [
+  {
+   "id": "swordsman",
+   "name": "검사",
+   "role": "전방 딜러",
+   "strength": 5,
+   "dexterity": 3,
+   "vitality": 4,
+   "intelligence": 1,
+   "weaponMin": 4,
+   "weaponMax": 8,
+   "attackStat": "strength",
+   "armor": 0.05,
+   "formationResist": 0.4,
+   "skills": [
+    "slash",
+    "smite",
+    "sweep",
+    "battle_cry"
+   ]
+  },
+  {
+   "id": "mage",
+   "name": "마법사",
+   "role": "중후열 광역·디버프",
+   "strength": 1,
+   "dexterity": 4,
+   "vitality": 2,
+   "intelligence": 6,
+   "weaponMin": 2,
+   "weaponMax": 5,
+   "attackStat": "intelligence",
+   "armor": 0,
+   "formationResist": 0.2,
+   "skills": [
+    "arcane_bolt",
+    "fireball",
+    "ice_lance",
+    "arcane_ward"
+   ]
+  },
+  {
+   "id": "archer",
+   "name": "궁수",
+   "role": "후열 딜러·보조 회복",
+   "strength": 3,
+   "dexterity": 6,
+   "vitality": 3,
+   "intelligence": 1,
+   "weaponMin": 3,
+   "weaponMax": 6,
+   "attackStat": "strength",
+   "armor": 0,
+   "formationResist": 0.2,
+   "skills": [
+    "aimed_shot",
+    "piercing_shot",
+    "magic_arrow",
+    "first_aid"
+   ]
+  },
+  {
+   "id": "rogue",
+   "name": "도적",
+   "role": "유틸리티·중독",
+   "strength": 4,
+   "dexterity": 6,
+   "vitality": 2,
+   "intelligence": 1,
+   "weaponMin": 3,
+   "weaponMax": 6,
+   "attackStat": "strength",
+   "armor": 0,
+   "formationResist": 0.3,
+   "skills": [
+    "ambush_stab",
+    "poison_blade",
+    "throwing_knife",
+    "grapple"
+   ]
+  },
+  {
+   "id": "priest",
+   "name": "사제",
+   "role": "힐러·서포터",
+   "strength": 2,
+   "dexterity": 3,
+   "vitality": 3,
+   "intelligence": 5,
+   "weaponMin": 2,
+   "weaponMax": 5,
+   "attackStat": "strength",
+   "armor": 0,
+   "formationResist": 0.3,
+   "skills": [
+    "healing_light",
+    "prayer",
+    "holy_strike",
+    "blessing"
+   ]
+  }
+ ],
+ "skills": [
+  {
+   "id": "slash",
+   "name": "베기",
+   "useRanks": [
+    1,
+    2
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": 0,
+     "crit": 0
+    },
+    {
+     "accuracy": 2,
+     "damage": 0,
+     "crit": 0.01
+    },
+    {
+     "accuracy": 4,
+     "damage": 0,
+     "crit": 0.02
+    },
+    {
+     "accuracy": 6,
+     "damage": 0,
+     "crit": 0.03
+    },
+    {
+     "accuracy": 8,
+     "damage": 0,
+     "crit": 0.04
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "기본기"
+  },
+  {
+   "id": "smite",
+   "name": "강타",
+   "useRanks": [
+    1
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": -10,
+     "damage": 0.4,
+     "crit": 0.05
+    },
+    {
+     "accuracy": -8,
+     "damage": 0.45,
+     "crit": 0.05
+    },
+    {
+     "accuracy": -6,
+     "damage": 0.5,
+     "crit": 0.05
+    },
+    {
+     "accuracy": -4,
+     "damage": 0.55,
+     "crit": 0.06
+    },
+    {
+     "accuracy": -2,
+     "damage": 0.6,
+     "crit": 0.06
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "1번 칸 전용, 적 1번만"
+  },
+  {
+   "id": "sweep",
+   "name": "휩쓸기",
+   "useRanks": [
+    1,
+    2
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": true,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": -5,
+     "damage": -0.4,
+     "crit": 0
+    },
+    {
+     "accuracy": -4,
+     "damage": -0.38,
+     "crit": 0
+    },
+    {
+     "accuracy": -3,
+     "damage": -0.35,
+     "crit": 0
+    },
+    {
+     "accuracy": -2,
+     "damage": -0.33,
+     "crit": 0
+    },
+    {
+     "accuracy": -1,
+     "damage": -0.3,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "적 1·2번 각각 판정"
+  },
+  {
+   "id": "battle_cry",
+   "name": "전투의 함성",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "allAllies",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "stat",
+     "stat": "damagePct",
+     "value": 0.15,
+     "duration": 3,
+     "target": "self",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    },
+    {
+     "kind": "stat",
+     "stat": "accuracy",
+     "value": 5,
+     "duration": 3,
+     "target": "allAllies",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    },
+    {
+     "kind": "stat",
+     "stat": "crit",
+     "value": 0.05,
+     "duration": 3,
+     "target": "allAllies",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "3라운드: 자신 피해 +15% · 아군 명중 +5 · 아군 치명 +5%p"
+  },
+  {
+   "id": "arcane_bolt",
+   "name": "마력탄",
+   "useRanks": [
+    1,
+    2,
+    3
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2,
+    3
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 5,
+     "damage": 0,
+     "crit": 0
+    },
+    {
+     "accuracy": 7,
+     "damage": 0,
+     "crit": 0.01
+    },
+    {
+     "accuracy": 9,
+     "damage": 0,
+     "crit": 0.02
+    },
+    {
+     "accuracy": 11,
+     "damage": 0,
+     "crit": 0.03
+    },
+    {
+     "accuracy": 13,
+     "damage": 0,
+     "crit": 0.04
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "기본기"
+  },
+  {
+   "id": "fireball",
+   "name": "화염구",
+   "useRanks": [
+    2,
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2,
+    3
+   ],
+   "multi": true,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": -5,
+     "damage": -0.35,
+     "crit": 0
+    },
+    {
+     "accuracy": -4,
+     "damage": -0.33,
+     "crit": 0
+    },
+    {
+     "accuracy": -3,
+     "damage": -0.3,
+     "crit": 0
+    },
+    {
+     "accuracy": -2,
+     "damage": -0.28,
+     "crit": 0
+    },
+    {
+     "accuracy": -1,
+     "damage": -0.25,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "적 1·2·3번 각각 판정"
+  },
+  {
+   "id": "ice_lance",
+   "name": "얼음 창",
+   "useRanks": [
+    2,
+    3
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    2,
+    3,
+    4
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": -5,
+     "damage": 0.2,
+     "crit": 0.05
+    },
+    {
+     "accuracy": -4,
+     "damage": 0.25,
+     "crit": 0.05
+    },
+    {
+     "accuracy": -3,
+     "damage": 0.3,
+     "crit": 0.06
+    },
+    {
+     "accuracy": -2,
+     "damage": 0.35,
+     "crit": 0.06
+    },
+    {
+     "accuracy": -1,
+     "damage": 0.4,
+     "crit": 0.07
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "stat",
+     "stat": "speed",
+     "value": -2,
+     "duration": 2,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "적 후열 전용. 명중 시 속도 −2 (2라운드)"
+  },
+  {
+   "id": "arcane_ward",
+   "name": "마력 보호막",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "ally",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "stat",
+     "stat": "damageTaken",
+     "value": -0.3,
+     "duration": 2,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "2라운드: 받는 피해 −30%"
+  },
+  {
+   "id": "aimed_shot",
+   "name": "조준 사격",
+   "useRanks": [
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 5,
+     "damage": 0,
+     "crit": 0.05
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "3·4번 칸에서 적 어디든"
+  },
+  {
+   "id": "piercing_shot",
+   "name": "관통 사격",
+   "useRanks": [
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": true,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.2,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "적 1·2번 관통"
+  },
+  {
+   "id": "first_aid",
+   "name": "응급처치",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "ally",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 3,
+    "max": 3,
+    "intelligenceDivisor": 2
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "HP +(3 + 지능÷2)"
+  },
+  {
+   "id": "magic_arrow",
+   "name": "매직 애로우",
+   "useRanks": [
+    2,
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": true,
+   "levels": [
+    {
+     "accuracy": 10,
+     "damage": 0,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 2,
+    "max": 4,
+    "intelligenceMultiplier": 1
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "피해 (2~4)+지능, 방어도 무시"
+  },
+  {
+   "id": "ambush_stab",
+   "name": "급습",
+   "useRanks": [
+    1,
+    2,
+    3
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 5,
+     "damage": 0,
+     "crit": 0.1
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "치명타 특화"
+  },
+  {
+   "id": "poison_blade",
+   "name": "독 칼날",
+   "useRanks": [
+    1,
+    2,
+    3
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2,
+    3
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.3,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "poison",
+     "stat": "",
+     "value": 0,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 2
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "명중 시 중독 3라운드 (차례 시작마다 2)"
+  },
+  {
+   "id": "throwing_knife",
+   "name": "투척 단검",
+   "useRanks": [
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    3,
+    4
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.1,
+     "crit": 0.05
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "적 후열(3·4번)"
+  },
+  {
+   "id": "grapple",
+   "name": "갈고리 사슬",
+   "useRanks": [
+    1,
+    2,
+    3
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    2,
+    3,
+    4
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 5,
+     "damage": -0.5,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": -2,
+    "chance": 1.0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "명중 시 앞으로 2칸 끌어당김"
+  },
+  {
+   "id": "healing_light",
+   "name": "치유의 빛",
+   "useRanks": [
+    2,
+    3,
+    4
+   ],
+   "target": "ally",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 5,
+    "max": 7,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "HP +5~7"
+  },
+  {
+   "id": "prayer",
+   "name": "기도",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "allAllies",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 2,
+    "max": 3,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "아군 전체 HP +2~3"
+  },
+  {
+   "id": "holy_strike",
+   "name": "성스러운 일격",
+   "useRanks": [
+    1,
+    2
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.1,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [
+    {
+     "type": "unholy",
+     "damage": 0.5
+    }
+   ],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "불경 피해 +50%"
+  },
+  {
+   "id": "blessing",
+   "name": "축복",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "ally",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "stat",
+     "stat": "damagePct",
+     "value": 0.1,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "unholy",
+     "damagePerTurn": 0
+    },
+    {
+     "kind": "stat",
+     "stat": "accuracy",
+     "value": 5,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "unholy",
+     "damagePerTurn": 0
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "3라운드: 피해 +10% · 명중 +5 (불경 상대 2배)"
+  },
+  {
+   "id": "stab",
+   "name": "찌르기",
+   "useRanks": [
+    1,
+    2
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": 0.0,
+     "crit": 0.0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": ""
+  },
+  {
+   "id": "throw_rock",
+   "name": "돌 던지기",
+   "useRanks": [
+    2,
+    3
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.3,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": ""
+  },
+  {
+   "id": "shield_bash",
+   "name": "방패 밀치기",
+   "useRanks": [
+    1
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.2,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 1,
+    "chance": 1.0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "명중 시 뒤로 1칸"
+  },
+  {
+   "id": "shield_block",
+   "name": "방패 막기",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "self",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "stat",
+     "stat": "damageTaken",
+     "value": -0.3,
+     "duration": 1,
+     "target": "self",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "받는 피해 −30% (1라운드)"
+  },
+  {
+   "id": "sling",
+   "name": "돌팔매",
+   "useRanks": [
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2,
+    3
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": 0.0,
+     "crit": 0.0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": ""
+  },
+  {
+   "id": "volley",
+   "name": "연발 투석",
+   "useRanks": [
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": true,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.4,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": ""
+  },
+  {
+   "id": "blood_rite",
+   "name": "피의 주문",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "ally",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 4,
+    "max": 4,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "고블린 HP +4"
+  },
+  {
+   "id": "hex_dart",
+   "name": "저주 침",
+   "useRanks": [
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2,
+    3
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.5,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "stat",
+     "stat": "accuracy",
+     "value": -5,
+     "duration": 2,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "명중 시 명중 −5 (2라운드)"
+  },
+  {
+   "id": "dark_veil",
+   "name": "어둠 장막",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "ally",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "stat",
+     "stat": "dodge",
+     "value": 10,
+     "duration": 2,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "회피 +10 (2라운드)"
+  },
+  {
+   "id": "cleave",
+   "name": "내려찍기",
+   "useRanks": [
+    1,
+    2
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": 0.3,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": ""
+  },
+  {
+   "id": "war_cry",
+   "name": "전쟁 고함",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "allAllies",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [
+    {
+     "kind": "stat",
+     "stat": "damagePct",
+     "value": 0.15,
+     "duration": 2,
+     "target": "allAllies",
+     "doubledVsType": "",
+     "damagePerTurn": 0
+    }
+   ],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "고블린 전체 피해 +15% (2라운드)"
+  },
+  {
+   "id": "swing",
+   "name": "휘두르기",
+   "useRanks": [
+    1,
+    2
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": true,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": -0.3,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 2,
+    "chance": 1.0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": "명중 시 뒤로 2칸"
+  },
+  {
+   "id": "summon",
+   "name": "부하 소환",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "allySlot",
+   "targetRanks": [],
+   "multi": false,
+   "damaging": false,
+   "ignoreArmor": false,
+   "levels": [],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "goblin",
+    "count": 1,
+    "countWhenAlone": 2
+   },
+   "curePoison": false,
+   "cooldown": 2,
+   "description": "빈 칸에 고블린 1마리(혼자면 2마리), 쿨타임 2"
+  },
+  {
+   "id": "claw",
+   "name": "할퀴기",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": false,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": 0,
+     "damage": 0.0,
+     "crit": 0.0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": ""
+  },
+  {
+   "id": "stomp",
+   "name": "짓밟기",
+   "useRanks": [
+    1,
+    2,
+    3,
+    4
+   ],
+   "target": "enemy",
+   "targetRanks": [
+    1,
+    2
+   ],
+   "multi": true,
+   "damaging": true,
+   "ignoreArmor": false,
+   "levels": [
+    {
+     "accuracy": -5,
+     "damage": -0.3,
+     "crit": 0
+    }
+   ],
+   "fixedDamage": {
+    "min": 0,
+    "max": 0,
+    "intelligenceMultiplier": 0
+   },
+   "typeBonuses": [],
+   "effects": [],
+   "heal": {
+    "min": 0,
+    "max": 0,
+    "intelligenceDivisor": 0
+   },
+   "displacement": {
+    "ranks": 0,
+    "chance": 0
+   },
+   "summon": {
+    "monsterId": "",
+    "count": 0,
+    "countWhenAlone": 0
+   },
+   "curePoison": false,
+   "cooldown": 0,
+   "description": ""
+  }
+ ],
+ "monsters": [
+  {
+   "id": "goblin",
+   "name": "고블린",
+   "hp": 10,
+   "attackMin": 2,
+   "attackMax": 4,
+   "accuracy": 10,
+   "dodge": 10,
+   "speed": 4,
+   "armor": 0,
+   "crit": 0.05,
+   "formationResist": 0.2,
+   "types": [
+    "normal"
+   ],
+   "skills": [
+    "stab",
+    "throw_rock"
+   ],
+   "family": "goblin"
+  },
+  {
+   "id": "goblin_shield",
+   "name": "고블린 방패병",
+   "hp": 14,
+   "attackMin": 2,
+   "attackMax": 3,
+   "accuracy": 8,
+   "dodge": 5,
+   "speed": 3,
+   "armor": 0.15,
+   "crit": 0.05,
+   "formationResist": 0.6,
+   "types": [
+    "normal"
+   ],
+   "skills": [
+    "shield_bash",
+    "shield_block"
+   ],
+   "family": "goblin"
+  },
+  {
+   "id": "goblin_chief",
+   "name": "고블린 우두머리",
+   "hp": 30,
+   "attackMin": 4,
+   "attackMax": 7,
+   "accuracy": 12,
+   "dodge": 8,
+   "speed": 5,
+   "armor": 0.05,
+   "crit": 0.05,
+   "formationResist": 0.5,
+   "types": [
+    "normal"
+   ],
+   "skills": [
+    "cleave",
+    "war_cry",
+    "swing",
+    "summon"
+   ],
+   "family": "goblin"
+  },
+  {
+   "id": "goblin_slinger",
+   "name": "고블린 투석병",
+   "hp": 8,
+   "attackMin": 2,
+   "attackMax": 4,
+   "accuracy": 12,
+   "dodge": 12,
+   "speed": 5,
+   "armor": 0,
+   "crit": 0.05,
+   "formationResist": 0.1,
+   "types": [
+    "normal"
+   ],
+   "skills": [
+    "sling",
+    "volley"
+   ],
+   "family": "goblin"
+  },
+  {
+   "id": "goblin_shaman",
+   "name": "고블린 주술사",
+   "hp": 8,
+   "attackMin": 1,
+   "attackMax": 3,
+   "accuracy": 10,
+   "dodge": 10,
+   "speed": 6,
+   "armor": 0,
+   "crit": 0.05,
+   "formationResist": 0.1,
+   "types": [
+    "normal"
+   ],
+   "skills": [
+    "blood_rite",
+    "hex_dart",
+    "dark_veil"
+   ],
+   "family": "goblin"
+  },
+  {
+   "id": "demon",
+   "name": "악마",
+   "hp": 45,
+   "attackMin": 6,
+   "attackMax": 10,
+   "accuracy": 18,
+   "dodge": 12,
+   "speed": 7,
+   "armor": 0.075,
+   "crit": 0.05,
+   "formationResist": 0.5,
+   "types": [
+    "unholy"
+   ],
+   "skills": [
+    "claw",
+    "stomp"
+   ],
+   "family": "demon"
+  }
+ ],
+ "encounters": [
+  {
+   "id": "tutorial_battle",
+   "name": "고블린 (튜토리얼)",
+   "slots": [
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 0.5
+    }
+   ]
+  },
+  {
+   "id": "tutorial_herb",
+   "name": "약초밭 고블린",
+   "slots": [
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 1.0
+    }
+   ]
+  },
+  {
+   "id": "forest_normal",
+   "name": "얕은 숲 고블린 무리",
+   "slots": [
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin",
+      "goblin_slinger",
+      "goblin_shaman"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin",
+      "goblin_slinger",
+      "goblin_shaman"
+     ],
+     "chance": 0.5
+    }
+   ]
+  },
+  {
+   "id": "forest_boss",
+   "name": "고블린 우두머리 (보스방)",
+   "slots": [
+    {
+     "candidates": [
+      "goblin_shield"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin_chief"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin_slinger"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin_shaman"
+     ],
+     "chance": 1.0
+    }
+   ]
+  },
+  {
+   "id": "demon_raid",
+   "name": "악마 습격",
+   "slots": [
+    {
+     "candidates": [
+      "demon"
+     ],
+     "chance": 1.0
+    }
+   ]
+  }
+ ],
+ "items": [
+  {
+   "id": "potion",
+   "name": "회복약",
+   "heal": 10,
+   "curePoison": false,
+   "stack": 5,
+   "price": 25
+  },
+  {
+   "id": "herb",
+   "name": "약초",
+   "heal": 2,
+   "curePoison": true,
+   "stack": 5,
+   "price": 15
+  },
+  {
+   "id": "key",
+   "name": "열쇠",
+   "heal": 0,
+   "curePoison": false,
+   "stack": 5,
+   "price": 20
+  },
+  {
+   "id": "torch",
+   "name": "횃불",
+   "heal": 0,
+   "curePoison": false,
+   "stack": 5,
+   "price": 10
+  }
+ ]
+}
