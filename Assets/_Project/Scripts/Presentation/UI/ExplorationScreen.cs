@@ -1,4 +1,5 @@
 using Grimward.Domain.Exploration;
+using Grimward.Presentation.Map;
 using TMPro;
 using UnityEngine;
 using UnityEngine.EventSystems;
@@ -8,8 +9,12 @@ namespace Grimward.Presentation.UI
 {
     public sealed class ExplorationScreen : MonoBehaviour
     {
+        // 지도가 보이는 화면 영역 (뷰포트 0~1). 상단 바·하단 버튼·오른쪽 로그와 겹치지 않는 자리.
+        private static readonly Vector2 MapAreaMin = new Vector2(.02f, .2f);
+        private static readonly Vector2 MapAreaMax = new Vector2(.68f, .88f);
+
         private ExplorationState state;
-        private MapView map;
+        private HexMapView map;
         private LogView log;
         private BattleView battleView;
         private TMP_Text time;
@@ -21,7 +26,7 @@ namespace Grimward.Presentation.UI
         private GameObject canvasObject;
         private GameObject eventSystemObject;
 
-        public void Initialize(ExplorationState exploration, TMP_FontAsset font)
+        public void Initialize(ExplorationState exploration, TMP_FontAsset font, HexMapTheme mapTheme, Camera worldCamera)
         {
             state = exploration;
             canvasObject = new GameObject("Panel_Exploration", typeof(RectTransform), typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
@@ -32,15 +37,23 @@ namespace Grimward.Presentation.UI
             scaler.referenceResolution = new Vector2(1280,720);
             scaler.matchWidthOrHeight = .5f;
             var root = (RectTransform)canvasObject.transform;
-            UiFactory.Panel("Panel_Background", root, Vector2.zero, Vector2.one, new Color(.055f,.075f,.09f));
+
+            // 지도는 카메라가 그리는 월드 타일이므로 화면 전체 배경은 두지 않고, 글자 영역에만 반투명 바를 깐다.
+            UiFactory.Panel("Panel_TopBar", root, new Vector2(0f,.885f), new Vector2(1f,1f), new Color(.03f,.045f,.055f,.85f));
+            UiFactory.Panel("Panel_BottomBar", root, new Vector2(0f,0f), new Vector2(.69f,.2f), new Color(.03f,.045f,.055f,.85f));
             UiFactory.Text("Txt_Title", root, font, "GRIMWARD · 숲 탐험", 27, new Vector2(.03f,.9f), new Vector2(.4f,.98f));
             hp = UiFactory.Text("Txt_Hp", root, font, "", 23, new Vector2(.4f,.9f), new Vector2(.62f,.98f));
             time = UiFactory.Text("Txt_Time", root, font, "", 24, new Vector2(.65f,.9f), new Vector2(.98f,.98f));
-            var mapPanel = UiFactory.Panel("Panel_Map", root, new Vector2(.02f,.2f), new Vector2(.68f,.88f), new Color(.08f,.11f,.13f));
-            map = new MapView(mapPanel, state, font);
-            var logPanel = UiFactory.Panel("Panel_Log", root, new Vector2(.7f,.03f), new Vector2(.98f,.88f), new Color(.09f,.12f,.15f));
+
+            // 지도 영역 표시용 빈 사각형 (그림 없음, 클릭을 막지 않음)
+            UiFactory.Rect("Panel_Map", root, MapAreaMin, MapAreaMax);
+            map = new GameObject("HexMap").AddComponent<HexMapView>();
+            map.Initialize(state, mapTheme, worldCamera, font,
+                new Rect(MapAreaMin, MapAreaMax - MapAreaMin));
+
+            var logPanel = UiFactory.Panel("Panel_Log", root, new Vector2(.7f,.03f), new Vector2(.98f,.88f), new Color(.09f,.12f,.15f,.95f));
             log = new LogView(logPanel, font);
-            UiFactory.Text("Txt_Help", root, font, "연결된 노드를 눌러 이동 · ? 미탐색 · 금색 현재 위치", 18, new Vector2(.03f,.15f), new Vector2(.68f,.2f));
+            UiFactory.Text("Txt_Help", root, font, "길로 이어진 칸을 눌러 이동 · ? 미탐색 · 밝은 칸 현재 위치", 18, new Vector2(.03f,.15f), new Vector2(.68f,.2f));
             autoReturn = UiFactory.Button("Btn_AutoReturn", root, font, "자동 귀환", new Vector2(.03f,.055f), new Vector2(.18f,.135f), () => state.TryAutoReturn());
             manualReturn = UiFactory.Button("Btn_ManualReturn", root, font, "마을로 귀환", new Vector2(.2f,.055f), new Vector2(.35f,.135f), () => state.TryManualReturn());
             returnHint = UiFactory.Text("Txt_ReturnStatus", root, font, "", 17, new Vector2(.37f,.04f), new Vector2(.68f,.14f));
@@ -80,6 +93,7 @@ namespace Grimward.Presentation.UI
                 state.Changed -= Refresh;
             }
             if (canvasObject != null) Destroy(canvasObject);
+            if (map != null) Destroy(map.gameObject);
             if (eventSystemObject != null) Destroy(eventSystemObject);
         }
     }

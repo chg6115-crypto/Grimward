@@ -5,6 +5,7 @@ using Grimward.Domain.Core;
 using Grimward.Domain.Map;
 using Grimward.Domain.Exploration;
 using Grimward.Presentation.Config;
+using Grimward.Presentation.Map;
 using Grimward.Presentation.UI;
 using TMPro;
 using UnityEngine;
@@ -16,6 +17,9 @@ namespace Grimward.Presentation.Bootstrap
         [SerializeField] private bool useSeedOverride;
         [SerializeField] private int seed = new BalanceConfig().DefaultSeed;
         [SerializeField] private TMP_FontAsset uiFont;
+        [Header("육각 지도 (메뉴 Grimward/Art/4 가 자동 연결)")]
+        [SerializeField] private HexMapTheme mapTheme;
+        [SerializeField] private Camera worldCamera;
         private TMP_FontAsset runtimeFont;
         public ExplorationState State { get; private set; }
 
@@ -45,8 +49,13 @@ namespace Grimward.Presentation.Bootstrap
                     throw new System.InvalidOperationException("GameBootstrap의 Ui Font에 한글 TMP 폰트를 지정하세요.");
                 font = runtimeFont;
             }
+            if (mapTheme == null || mapTheme.tilePrefab == null)
+                throw new System.InvalidOperationException("GameBootstrap의 Map Theme가 비어 있습니다. 메뉴 Grimward/Art/4 를 실행하세요.");
+            var cameraForMap = worldCamera != null ? worldCamera : Camera.main != null ? Camera.main : FindAnyObjectByType<Camera>();
+            if (cameraForMap == null)
+                throw new System.InvalidOperationException("씬에 카메라가 없습니다.");
             var screen = gameObject.AddComponent<ExplorationScreen>();
-            screen.Initialize(State, font);
+            screen.Initialize(State, font, mapTheme, cameraForMap);
         }
 
         private void OnDestroy()

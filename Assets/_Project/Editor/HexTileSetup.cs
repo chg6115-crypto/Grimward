@@ -146,6 +146,64 @@ namespace Grimward.Editor
             Debug.Log($"Grimward: {ScenePath} 생성 완료. 정렬·간격·겹침을 확인하세요.");
         }
 
+        [MenuItem("Grimward/Art/4. Main 씬에 육각 지도 연결")]
+        public static void ConnectMainScene()
+        {
+            const string themePath = "Assets/_Project/Data/HexMapTheme.asset";
+            const string mainScenePath = "Assets/_Project/Scenes/Main.unity";
+
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath) == null) CreatePrefab();
+
+            // 테마 에셋: 없으면 만들고, 있으면 비어 있는 참조만 채운다 (조정한 색·수치는 유지).
+            var theme = AssetDatabase.LoadAssetAtPath<Grimward.Presentation.Map.HexMapTheme>(themePath);
+            if (theme == null)
+            {
+                theme = ScriptableObject.CreateInstance<Grimward.Presentation.Map.HexMapTheme>();
+                AssetDatabase.CreateAsset(theme, themePath);
+            }
+            if (theme.tilePrefab == null) theme.tilePrefab = AssetDatabase.LoadAssetAtPath<GameObject>(PrefabPath);
+            if (theme.markerUnknown == null) theme.markerUnknown = LoadSprite("marker_unknown");
+            if (theme.markerStart == null) theme.markerStart = LoadSprite("marker_start");
+            if (theme.markerBattle == null) theme.markerBattle = LoadSprite("marker_battle");
+            if (theme.markerTreasure == null) theme.markerTreasure = LoadSprite("marker_treasure");
+            if (theme.roadSegment == null) theme.roadSegment = LoadSprite("hex_road_segment");
+            if (theme.decorations == null || theme.decorations.Length == 0)
+                theme.decorations = new[] { LoadSprite("tree_01") };
+            EditorUtility.SetDirty(theme);
+            AssetDatabase.SaveAssets();
+
+            if (!EditorSceneManager.SaveCurrentModifiedScenesIfUserWantsTo()) return;
+            var scene = EditorSceneManager.OpenScene(mainScenePath, OpenSceneMode.Single);
+
+            var bootstrap = Object.FindAnyObjectByType<Grimward.Presentation.Bootstrap.GameBootstrap>();
+            if (bootstrap == null)
+            {
+                Debug.LogError("Main 씬에서 GameBootstrap을 찾지 못했습니다.");
+                return;
+            }
+
+            var camera = Object.FindAnyObjectByType<Camera>();
+            if (camera == null)
+            {
+                var cameraObject = new GameObject("Main Camera", typeof(Camera));
+                cameraObject.transform.position = new Vector3(0f, 0f, -10f);
+                camera = cameraObject.GetComponent<Camera>();
+            }
+            camera.gameObject.name = "Main Camera";
+            camera.gameObject.tag = "MainCamera";
+            camera.orthographic = true;
+            camera.cullingMask = ~0;   // 기존 M1 설정은 아무것도 그리지 않았음(0) → 모두 그리도록
+
+            var serialized = new SerializedObject(bootstrap);
+            serialized.FindProperty("mapTheme").objectReferenceValue = theme;
+            serialized.FindProperty("worldCamera").objectReferenceValue = camera;
+            serialized.ApplyModifiedPropertiesWithoutUndo();
+
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+            Debug.Log("Grimward: Main 씬에 육각 지도 테마와 카메라를 연결했습니다.");
+        }
+
         /// <summary>pointy-top 축 좌표 → 월드 좌표. r이 커질수록 아래로 내려간다 (지도 UI와 같은 방향).</summary>
         public static Vector3 AxialToWorld(int q, int r) =>
             new Vector3(Mathf.Sqrt(3f) * HexRadius * (q + r * 0.5f), -1.5f * HexRadius * r, 0f);
