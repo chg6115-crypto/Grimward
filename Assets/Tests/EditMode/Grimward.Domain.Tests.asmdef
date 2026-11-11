@@ -1,5 +1,6 @@
 {
   "name": "Grimward.Domain.Tests",
+  "rootNamespace": "Grimward",
   "references": [
     "Grimward.Domain"
   ],

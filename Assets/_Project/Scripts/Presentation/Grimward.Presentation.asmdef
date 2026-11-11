@@ -5,6 +5,7 @@
     "Grimward.Domain",
     "Unity.TextMeshPro",
     "Unity.ugui",
+    "UnityEngine.UI",
     "Unity.InputSystem"
   ]
 }

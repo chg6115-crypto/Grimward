@@ -1,7 +1,7 @@
 ﻿<Solution>
   <Project Path="Grimward.Domain.csproj" />
   <Project Path="Grimward.Presentation.csproj" />
-  <Project Path="Unity.2D.Welcome.csproj" />
   <Project Path="Grimward.Editor.csproj" />
+  <Project Path="Unity.2D.Welcome.csproj" />
   <Project Path="Grimward.Domain.Tests.csproj" />
 </Solution>

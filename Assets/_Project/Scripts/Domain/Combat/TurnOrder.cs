@@ -1,38 +1,36 @@
 using System.Collections.Generic;
 using System.Linq;
-using Grimward.Domain.Config;
 using Grimward.Domain.Core;
+using Grimward.Domain.Data;
+
 namespace Grimward.Domain.Combat
 {
-    public sealed class TurnEntry
-    {
-        public Combatant Fighter { get; }
-        public int Initiative { get; }
-        public TurnEntry(Combatant fighter, int initiative) { Fighter = fighter; Initiative = initiative; }
-    }
+    /// <summary>라운드 행동 순서: 속도(+속도 효과) + 1dN 내림차순. 동률은 기본 속도, 그다음 무작위.</summary>
     public static class TurnOrder
     {
-        public static IReadOnlyList<TurnEntry> Roll(IEnumerable<Combatant> fighters, IRandomSource random, BalanceConfig c)
+        public sealed class Entry
         {
-            var entries = fighters.Where(f => f.IsAlive)
-                .Select(f => new TurnEntry(f, f.Speed + random.NextInt(1, c.InitiativeDieSides)))
-                .OrderByDescending(e => e.Initiative).ThenByDescending(e => e.Fighter.Speed).ToList();
-            // 완전 동률 그룹만 Fisher-Yates. 비교 함수 안에서 난수를 호출하지 않는다.
-            for (int start = 0; start < entries.Count;)
+            public Combatant Combatant { get; }
+            public int Initiative { get; }
+            public Entry(Combatant c, int initiative) { Combatant = c; Initiative = initiative; }
+        }
+
+        public static int EffectiveSpeed(Combatant c) => c.Speed + (int)c.Effects.Sum(DataKeys.Stat.Speed);
+
+        public static List<Entry> Roll(IEnumerable<Combatant> combatants, IRandomSource random, BalanceConfig config)
+        {
+            var rolled = new List<(Entry entry, double tie)>();
+            foreach (var c in combatants)
             {
-                int end = start + 1;
-                while (end < entries.Count && entries[end].Initiative == entries[start].Initiative &&
-                    entries[end].Fighter.Speed == entries[start].Fighter.Speed) end++;
-                for (int i = end - 1; i > start; i--)
-                {
-                    int j = random.NextInt(start, i);
-                    var temp = entries[i];
-                    entries[i] = entries[j];
-                    entries[j] = temp;
-                }
-                start = end;
+                int initiative = EffectiveSpeed(c) + random.NextInt(1, config.speedRollDie);
+                rolled.Add((new Entry(c, initiative), random.NextDouble()));
             }
-            return entries.AsReadOnly();
+            return rolled
+                .OrderByDescending(x => x.entry.Initiative)
+                .ThenByDescending(x => x.entry.Combatant.Speed)
+                .ThenBy(x => x.tie)
+                .Select(x => x.entry)
+                .ToList();
         }
     }
 }

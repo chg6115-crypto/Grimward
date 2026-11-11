@@ -1,0 +1,15 @@
+{
+  "name": "Grimward.Editor",
+  "rootNamespace": "Grimward",
+  "references": [
+    "Grimward.Domain",
+    "Grimward.Presentation",
+    "Unity.TextMeshPro",
+    "Unity.ugui",
+    "UnityEngine.UI",
+    "Unity.InputSystem"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ]
+}

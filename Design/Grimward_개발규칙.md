@@ -1,7 +1,7 @@
 # Grimward — 개발 규칙
 
 > 작성일: 2026-11-10 (재시작판) · 사람과 AI 코딩 에이전트(Codex 등)가 함께 따르는 상시 규칙
-> 무엇을 만들지는 `Grimward_확정기획.md`, 수치·목록은 `Grimward_게임설계.xlsx`, 지금 할 일은 `Grimward_개발계획.md`의 현재 마일스톤을 본다.
+> 무엇을 만들지는 `Grimward_기획안.md`, 수치·목록은 `Grimward_게임설계.xlsx`, 지금 할 일은 `Grimward_개발계획.md`의 현재 마일스톤을 본다.
 
 ---
 
@@ -9,7 +9,7 @@
 
 | 순위 | 문서 | 용도 |
 |---|---|---|
-| 1 | `Design/Grimward_확정기획.md` | 게임 규칙의 기준 |
+| 1 | `Design/Grimward_기획안.md` | 게임 규칙의 기준 |
 | 2 | `Design/Grimward_게임설계.xlsx` | 수치·목록(기술, 몬스터, 조사 물건, 맵 좌표, 특성 등) |
 | 3 | `Design/Grimward_개발계획.md` | 마일스톤별 범위·완료 조건 |
 | 4 | 이 문서 | 코드 구조와 작업 방식 |
@@ -54,9 +54,36 @@ Assets/_Project/
       Town/ Expedition/ Battle/ Common/   화면·패널·입력
     Editor/                Grimward.Editor.asmdef (씬 생성·데이터 검증 메뉴)
   Data/Resources/GameData/ gamedata.json
-  Prefabs/  Art/  Scenes/
+  Art/                     이미지·폰트 (아래 「아트 폴더」)
+  Prefabs/                 UI/ · Battle/ 등 종류별
+  Scenes/                  Title · Town · Expedition · BattleTest
 Assets/Tests/EditMode/     Grimward.Domain.Tests.asmdef
 ```
+
+### 아트 폴더 (`Assets/_Project/Art/`)
+
+```
+Art/
+  Characters/Heroes/       hero_<직업ID>_body.png · hero_<직업ID>_portrait.png
+  Characters/Monsters/     mon_<몬스터ID>_body.png
+  UI/Icons/Skills/         skill_<기술ID>.png
+  UI/Icons/Items/          item_<아이템ID>.png
+  UI/Icons/Status/         status_poison.png · status_buff.png · status_debuff.png
+  UI/Frames/               frame_*.png · btn_*.png (패널·버튼 틀)
+  Backgrounds/Battle/      bg_battle_<지역>.png (예: bg_battle_forest_shallow)
+  Backgrounds/Town/        bg_town_<화면>.png
+  Map/Hex/                 육각 타일 (지금의 Art/Hex를 M2 때 옮김)
+  VFX/                     이펙트 (나중에)
+  Fonts/                   NotoSansKR (OFL)
+```
+
+- 「종류 → 대상」 순서로 나눈다. `Art/Arts`처럼 같은 말을 겹치지 않는다.
+- 파일 이름: 영어 소문자·숫자·밑줄만. **`종류_데이터ID_용도`**, ID는 gamedata.json의 id 그대로 (코드가 이름으로 이미지를 찾는다).
+- 권장 크기: 몸통 512 안팎(투명 PNG) · 초상화 256 · 기술/아이템 아이콘 128 · 배경 1920×1080.
+- 가져오기: Texture Type = Sprite (2D and UI). 몸통은 Pivot = Bottom(발 기준).
+- 이미지가 없는 대상은 색 사각형으로 표시된다 (일부만 넣어도 테스트 가능).
+- 이미지를 넣으면 에디터가 파일 이름으로 `Data/Resources/SpriteCatalog.asset`(ID → 스프라이트)을 자동 갱신한다. 수동: 메뉴 `Grimward/스프라이트 목록 갱신`. 몬스터는 `mon_<id>_body` 외에 `<id>`만 써도 인식.
+- 외부 그림은 라이선스를 확인한 것만 넣는다. 다른 게임·TRPG의 공식 일러스트는 넣지 않는다.
 
 - **Domain은 UnityEngine을 참조하지 않는다.** 게임 규칙은 전부 Domain에 있다.
 - **Presentation은 표시와 입력만.** 규칙 계산을 하지 않고 Domain을 호출한다.
@@ -109,7 +136,7 @@ Assets/Tests/EditMode/     Grimward.Domain.Tests.asmdef
 
 ---
 
-## 7. 핵심 규칙 구현 메모 (확정기획 요약)
+## 7. 핵심 규칙 구현 메모 (기획안 요약)
 
 - **시간**: GameTime(일차, 분). 낮 06:00~19:59. 휴식 = 다음 날 06:00. 하루 1회 출정 플래그.
 - **전투 순서**: 라운드마다 속도 + 1d8. 동률은 기본 속도, 그다음 무작위.
@@ -125,7 +152,9 @@ Assets/Tests/EditMode/     Grimward.Domain.Tests.asmdef
 
 ## 8. 화면 규칙
 
-- uGUI + TextMeshPro. 마을은 Scene 하나에 Panel 전환. Scene 구성은 `Title` · `Town` · `Expedition`(지도 + 전투 패널) 기준으로 시작.
+- uGUI + TextMeshPro. **화면은 Hierarchy(씬·프리팹)에 만들어 두고, 스크립트는 `[SerializeField]`로 참조만 한다.** 런타임에 코드로 UI를 생성하지 않는다. 처음 뼈대는 에디터 메뉴(`Grimward/...`)가 만들어 씬에 저장할 수 있고, 그 뒤 배치·색은 씬에서 직접 고친다.
+- 한글 폰트: `Assets/_Project/Art/Fonts/NotoSansKR-Regular.ttf`(SIL OFL) → TMP 동적 폰트 에셋 `NotoSansKR SDF`.
+- 마을은 Scene 하나에 Panel 전환. Scene 구성은 `Title` · `Town` · `Expedition`(지도 + 전투 패널) 기준으로 시작.
 - Canvas Scaler: Scale With Screen Size, 1920×1080, Match 0.5에서 시작. 16:9 · 19.5:9 · 20:9 확인. 안전 영역(노치) 대응.
 - 터치 영역은 넉넉하게(약 48dp 이상). 마우스 호버에만 의존하는 기능 금지.
 - **이름 규칙** (AltTester 자동화용): `Panel_`, `Btn_`, `Txt_` 접두어. 예: `Panel_TownMain`, `Btn_Expedition`, `Txt_RaidCountdown`. UI가 아닌 오브젝트에는 쓰지 않는다.
