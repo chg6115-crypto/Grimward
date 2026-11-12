@@ -35,6 +35,37 @@ namespace Grimward.Domain.Combat
             return Math.Max(c.minHitDamage, floored);
         }
 
+        /// <summary>기술 능력치 보너스 = 내림((근력×a + 민첩×b + 지능×c) ÷ statWeightDivisor). 가중치 없으면 0.</summary>
+        public static int StatBonus(BalanceConfig c, Combatant a, StatWeightDefinition w)
+        {
+            if (w == null || w.Sum == 0 || c.statWeightDivisor <= 0) return 0;
+            return (a.Strength * w.strength + a.Dexterity * w.dexterity + a.Intelligence * w.intelligence) / c.statWeightDivisor;
+        }
+
+        /// <summary>안정성 = 지각 × 계수, 상한 stabilityMax.</summary>
+        public static double Stability(BalanceConfig c, int perception) =>
+            Math.Max(0, Math.Min(c.stabilityMax, perception * c.stabilityPerPerception));
+
+        /// <summary>
+        /// 기술 피해 굴림 범위 (피해 보정·치명·감소 전).
+        /// 편차가 있으면: 중앙값 = 무기 평균 + 능력치 보너스, 하한 = 중앙값 × (1 − 편차 × (1 − 안정성)), 상한 = 중앙값 × (1 + 편차), 각각 내림.
+        /// 편차가 0이면 공격력 범위 그대로 (몬스터 기본).
+        /// </summary>
+        public static void DamageRange(BalanceConfig c, Combatant a, SkillDefinition s, out int min, out int max)
+        {
+            if (s.variance <= 0)
+            {
+                min = a.AttackMin; max = a.AttackMax;
+                return;
+            }
+            decimal center = (a.WeaponMin + a.WeaponMax) / 2m + StatBonus(c, a, s.weights);
+            decimal v = ToDecimal(s.variance), st = ToDecimal(Stability(c, a.Perception));
+            min = (int)decimal.Floor(center * (1m - v * (1m - st)));
+            max = (int)decimal.Floor(center * (1m + v));
+            if (min < 0) min = 0;
+            if (min > max) min = max;
+        }
+
         /// <summary>double 입력값(데이터의 0.4 등)을 짧은 십진 표현으로 바꾼다.</summary>
         public static decimal ToDecimal(double value) => decimal.Round((decimal)value, 6);
 

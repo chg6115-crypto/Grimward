@@ -18,6 +18,31 @@ namespace Grimward.Domain.Data
             public const string Poison = "poison";
             /// <summary>출혈: 차례 시작 시 피해. 부상(베임)에서만 생기고 약초로 풀리지 않는다.</summary>
             public const string Bleed = "bleed";
+            /// <summary>기절: 다음 자기 차례를 건너뛴다. 풀린 뒤 기절 저항이 잠시 오른다.</summary>
+            public const string Stun = "stun";
+            /// <summary>화상: 차례 시작 시 피해 (화염구).</summary>
+            public const string Burn = "burn";
+        }
+
+        /// <summary>상태이상 저항 분류. 확률 = 기술 확률 − 대상 저항. 면역이면 걸리지 않는다.</summary>
+        public static class Resist
+        {
+            public const string Stun = "stun";
+            public const string Poison = "poison";
+            public const string Bleed = "bleed";
+            public const string Burn = "burn";
+            /// <summary>약화: 적에게 거는 능력치 감소 효과 전체.</summary>
+            public const string Debuff = "debuff";
+        }
+
+        public static bool IsResistKind(string k) =>
+            k == Resist.Stun || k == Resist.Poison || k == Resist.Bleed || k == Resist.Burn || k == Resist.Debuff;
+
+        public static class DamageType
+        {
+            public const string Physical = "physical";
+            /// <summary>마법 피해: 방어도 대신 마법 저항으로 줄어든다.</summary>
+            public const string Magical = "magical";
         }
 
         public static class EffectTarget
@@ -39,6 +64,12 @@ namespace Grimward.Domain.Data
             public const string Armor = "armor";
             /// <summary>최대 HP 비율 증가 (패시브 오라 전용). 걸릴 때 그만큼 HP도 늘고, 풀리면 넘치는 HP는 깎인다.</summary>
             public const string MaxHpPct = "maxHpPct";
+            /// <summary>진형 붕괴 저항 가산 (0.7 = +70%p).</summary>
+            public const string FormationResist = "formationResist";
+            /// <summary>기절 저항 가산 (기절이 풀린 뒤 보호).</summary>
+            public const string StunResist = "stunResist";
+            /// <summary>마법 저항 가산.</summary>
+            public const string MagicResist = "magicResist";
         }
 
         public static class Passive

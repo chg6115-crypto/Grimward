@@ -43,6 +43,7 @@ namespace Grimward.Tests
             damageReductionCap = 0.8, minHitDamage = 1, injuryMaxPerAdventurer = 2, injuryHpThreshold = 0.3, injuryThresholdChance = 0.5, nightPartyAccuracyPenalty = 0.1, nightEnemyAccuracyBonus = 0.1, speedRollDie = 8,
             ranksPerSide = 4, itemsPerTurn = 1, fleeHpDamageRatio = 0.2, aiBuffChance = 0.3, aiHealThreshold = 0.5,
             defaultPerception = 3, bagSlots = 12,
+            heroResistBase = 0, heroResistPerVitality = 0, heroDebuffResistPerIntelligence = 0, stunRecoveryResist = 0.3, statWeightDivisor = 6, stabilityPerPerception = 0.04, stabilityMax = 0.4,
             monsterHpVariance = 0.15, monsterAccuracyDodgeVariance = 2, monsterSpeedVariance = 1
         };
 
@@ -81,7 +82,31 @@ namespace Grimward.Tests
                 Skill("bonk", All, "enemy", All),
                 Skill("cut", All, "enemy", All),
                 Skill("aid", All, "ally", damaging: false),
+                Skill("bash", All, "enemy", All),
+                Skill("zap", All, "enemy", All),
+                Skill("hex", All, "enemy", All, damaging: false),
             };
+            skills.Find(s => s.id == "bash").effects = new[]
+            {
+                new EffectDefinition { kind = "stun", duration = 1, target = "target", chance = 0.8 }
+            };
+            skills.Find(s => s.id == "zap").damageType = "magical";
+            var snatch = Skill("snatch", new[] { 1, 2 }, "enemy", new[] { 1, 2 }, dmg: -0.3);
+            snatch.steal = true;
+            skills.Add(snatch);
+            var smash = Skill("smash", All, "enemy", All);
+            smash.weights = new StatWeightDefinition { strength = 3 };
+            smash.variance = 0.5;
+            skills.Add(smash);
+            var aim = Skill("aim", All, "enemy", All);
+            aim.weights = new StatWeightDefinition { dexterity = 3 };
+            aim.variance = 0.1;
+            skills.Add(aim);
+            var mend = Skill("mend", All, "ally", damaging: false);
+            mend.heal = new HealDefinition { min = 3, max = 5 };
+            mend.weights = new StatWeightDefinition { intelligence = 3 };
+            skills.Add(mend);
+            skills.Find(s => s.id == "hex").effects = new[] { Stat("accuracy", -10, 2) };
             skills.Find(s => s.id == "bonk").injury = new SkillInjuryDefinition { injuryId = "concussion", chance = 0.3 };
             skills.Find(s => s.id == "cut").injury = new SkillInjuryDefinition { injuryId = "shallow_cut", chance = 0.2 };
             var aid = skills.Find(s => s.id == "aid");
@@ -172,6 +197,34 @@ namespace Grimward.Tests
                     },
                     new MonsterDefinition
                     {
+                        id = "thief", name = "소매치기", hp = 15, attackMin = 3, attackMax = 5, accuracy = 12, dodge = 25,
+                        speed = 6, armor = 0, crit = 0.05, formationResist = 0.2, types = new[] { "normal" },
+                        skills = new[] { "snatch", "hit" }, family = "goblin"
+                    },
+                    new MonsterDefinition
+                    {
+                        id = "golem", name = "골렘", hp = 50, attackMin = 4, attackMax = 7, accuracy = 10, dodge = 0,
+                        speed = 3, armor = 0.3, magicResist = 0.5, crit = 0.05, formationResist = 0.2, types = new[] { "normal" },
+                        skills = new[] { "hit" }, family = "golem",
+                        resists = new ResistDefinition { stun = 0.4, poison = 0.3, bleed = 0.3, burn = 0.3, debuff = 0.3 },
+                        immunities = new[] { "poison", "bleed" }
+                    },
+                    new MonsterDefinition
+                    {
+                        id = "wall", name = "벽", hp = 40, attackMin = 4, attackMax = 7, accuracy = 12, dodge = 6,
+                        speed = 5, armor = 0, crit = 0.05, formationResist = 1.2, types = new[] { "normal" },
+                        skills = new[] { "hit" }, family = "goblin",
+                        passives = new[]
+                        {
+                            new PassiveDefinition
+                            {
+                                id = "bulwark", name = "거구의 벽", kind = "allyAura",
+                                effects = new[] { Stat("formationResist", 0.7, 0) }
+                            }
+                        }
+                    },
+                    new MonsterDefinition
+                    {
                         id = "demon", name = "악마", hp = 45, attackMin = 6, attackMax = 10, accuracy = 18, dodge = 12,
                         speed = 7, armor = 0, crit = 0.05, formationResist = 0.5, types = new[] { "unholy" },
                         skills = new[] { "hit" }, family = "demon"
@@ -191,6 +244,10 @@ namespace Grimward.Tests
                     new EncounterDefinition
                     {
                         id = "boss_any", name = "보스 무작위", variants = new[] { "boss_a", "boss_b" }
+                    },
+                    new EncounterDefinition
+                    {
+                        id = "weighted", name = "가중치", variants = new[] { "boss_a", "boss_b" }, variantWeights = new[] { 0, 1 }
                     },
                     new EncounterDefinition
                     {

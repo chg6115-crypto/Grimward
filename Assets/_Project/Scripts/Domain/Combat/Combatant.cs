@@ -33,7 +33,22 @@ namespace Grimward.Domain.Combat
         public double EffectiveArmor => Armor + Effects.Sum(DataKeys.Stat.Armor);
         public double BaseCrit { get; }
         public double FormationResist { get; }
+        /// <summary>기본 진형 붕괴 저항 + 효과(거구의 벽 등). 1 이상이면 밀리지 않는다.</summary>
+        public double EffectiveFormationResist => FormationResist + Effects.Sum(DataKeys.Stat.FormationResist);
+        /// <summary>마법 저항 (마법 피해에서 방어도 대신). 음수여도 피해가 늘지는 않는다.</summary>
+        public double MagicResist { get; set; }
+        public double EffectiveMagicResist => MagicResist + Effects.Sum(DataKeys.Stat.MagicResist);
+        private readonly Dictionary<string, double> resists = new Dictionary<string, double>();
+        private readonly HashSet<string> immunities = new HashSet<string>();
+        public IReadOnlyCollection<string> Immunities => immunities;
         public int Intelligence { get; }
+        /// <summary>기술 피해 계산용 무기 범위 (몬스터는 공격 범위와 같음).</summary>
+        public int WeaponMin { get; set; }
+        public int WeaponMax { get; set; }
+        /// <summary>모험가 능력치 (가중치·안정성 계산용, 몬스터는 0).</summary>
+        public int Strength { get; set; }
+        public int Dexterity { get; set; }
+        public int Perception { get; set; }
         public IReadOnlyList<string> Types { get; }
         public IReadOnlyList<SkillDefinition> Skills { get; }
         public IReadOnlyList<PassiveDefinition> Passives { get; }
@@ -49,7 +64,16 @@ namespace Grimward.Domain.Combat
         /// <summary>이번 전투에서 HP 임계(30%) 부상 판정을 이미 했는가.</summary>
         public bool InjuryThresholdChecked { get; set; }
 
-        public bool IsAlive => Hp > 0;
+        /// <summary>전장에서 도망쳐 사라짐 (소매치기). 쓰러진 것과 같이 진형에서 빠지지만 처치는 아님.</summary>
+        public bool Escaped { get; private set; }
+        public bool IsAlive => Hp > 0 && !Escaped;
+        public void MarkEscaped() => Escaped = true;
+
+        /// <summary>소매치기: 훔친 아이템 (처치하면 되찾음).</summary>
+        public List<string> StolenItems { get; } = new List<string>();
+        public bool HasStolen { get; set; }
+        /// <summary>소매치기 도주 라운드 (0 = 도주 준비 아님). 이 라운드의 자기 차례에 무조건 도주.</summary>
+        public int EscapeRound { get; set; }
 
         public Combatant(int uid, BattleSide side, string name, string definitionId, string family, int level,
             int maxHp, int hp, int attackMin, int attackMax, int accuracy, int dodge, int speed, double armor,
@@ -61,6 +85,7 @@ namespace Grimward.Domain.Combat
             Uid = uid; Side = side; Name = name; DefinitionId = definitionId; Family = family; Level = level;
             BaseMaxHp = maxHp; Hp = Math.Max(0, Math.Min(hp, maxHp));
             AttackMin = attackMin; AttackMax = attackMax; Accuracy = accuracy; Dodge = dodge; Speed = speed;
+            WeaponMin = attackMin; WeaponMax = attackMax;
             Armor = armor; BaseCrit = baseCrit; FormationResist = formationResist; Intelligence = intelligence;
             Types = types ?? Array.Empty<string>();
             Skills = skills ?? Array.Empty<SkillDefinition>();
@@ -115,6 +140,18 @@ namespace Grimward.Domain.Combat
         public void StartCooldown(SkillDefinition skill, int round)
         {
             if (skill.cooldown > 0) cooldownUntilRound[skill.id] = round + skill.cooldown;
+        }
+
+        public void SetResist(string kind, double value) => resists[kind] = value;
+        public void AddImmunity(string kind) { if (!string.IsNullOrEmpty(kind)) immunities.Add(kind); }
+        public bool IsImmune(string kind) => immunities.Contains(kind);
+
+        /// <summary>상태이상 저항 (DataKeys.Resist). 기절은 회복 직후 가산(효과)을 더한다.</summary>
+        public double Resist(string kind)
+        {
+            resists.TryGetValue(kind, out double v);
+            if (kind == DataKeys.Resist.Stun) v += Effects.Sum(DataKeys.Stat.StunResist);
+            return v;
         }
 
         public bool HasType(string type)

@@ -64,7 +64,8 @@ namespace Grimward.Presentation.Battle
             hpText.text = $"체력: {c.Hp}/{c.MaxHp}";
 
             string stats = BattleText.Stats(c, db.Balance);
-            if (hero) stats += "\n\n" + BattleText.Attributes(c);
+            stats += "\n\n<b>저항</b>\n" + BattleText.Resists(c);
+            if (hero) stats += "\n\n" + BattleText.Attributes(c, db.Balance);
             statsText.text = stats;
 
             string skills = string.Join("\n", c.Skills.Select(s =>

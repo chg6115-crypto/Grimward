@@ -34,6 +34,14 @@ namespace Grimward.Domain.Combat
                 a.Class.armor, StatFormulas.Crit(c, a), a.Class.formationResist, a.Intelligence,
                 Array.Empty<string>(), skills, a);
             foreach (var inj in a.Injuries) combatant.Injuries.Add(inj.Clone());
+            combatant.WeaponMin = a.Class.weaponMin; combatant.WeaponMax = a.Class.weaponMax;
+            combatant.Strength = a.Strength; combatant.Dexterity = a.Dexterity; combatant.Perception = a.Perception;
+            double body = c.heroResistBase + a.Vitality * c.heroResistPerVitality;
+            combatant.SetResist(DataKeys.Resist.Stun, body);
+            combatant.SetResist(DataKeys.Resist.Poison, body);
+            combatant.SetResist(DataKeys.Resist.Bleed, body);
+            combatant.SetResist(DataKeys.Resist.Burn, body);
+            combatant.SetResist(DataKeys.Resist.Debuff, c.heroResistBase + a.Intelligence * c.heroDebuffResistPerIntelligence);
             return combatant;
         }
 
@@ -51,11 +59,23 @@ namespace Grimward.Domain.Combat
                 dodge += Roll(c.monsterAccuracyDodgeVariance * scale);
                 speed = Math.Max(0, speed + Roll(c.monsterSpeedVariance * scale));
             }
-            return new Combatant(nextUid++, BattleSide.Enemy, m.name, m.id, m.family, 1,
+            var mon = new Combatant(nextUid++, BattleSide.Enemy, m.name, m.id, m.family, 1,
                 hp, hp, m.attackMin, m.attackMax, accuracy, dodge, speed,
                 m.armor, m.crit, m.formationResist, 0,
                 m.types ?? Array.Empty<string>(), skills, null, m.passives ?? Array.Empty<PassiveDefinition>(),
                 Math.Max(1, m.size), Math.Max(1, m.actionsPerTurn));
+            mon.MagicResist = m.magicResist;
+            var r = m.resists;
+            if (r != null)
+            {
+                mon.SetResist(DataKeys.Resist.Stun, r.stun);
+                mon.SetResist(DataKeys.Resist.Poison, r.poison);
+                mon.SetResist(DataKeys.Resist.Bleed, r.bleed);
+                mon.SetResist(DataKeys.Resist.Burn, r.burn);
+                mon.SetResist(DataKeys.Resist.Debuff, r.debuff);
+            }
+            if (m.immunities != null) foreach (var im in m.immunities) mon.AddImmunity(im);
+            return mon;
         }
 
         public Combatant FromMonster(string monsterId) => FromMonster(db.GetMonster(monsterId));
@@ -66,6 +86,20 @@ namespace Grimward.Domain.Combat
             return r <= 0 ? 0 : random.NextInt(-r, r);
         }
 
+        /// <summary>가중치가 있으면 가중치로, 없으면 균등하게 편성 하나를 고른다.</summary>
+        private static int PickVariant(EncounterDefinition e, IRandomSource random)
+        {
+            var w = e.variantWeights;
+            if (w == null || w.Length != e.variants.Length || w.Sum() <= 0) return random.NextInt(0, e.variants.Length - 1);
+            int roll = random.NextInt(1, w.Sum());
+            for (int i = 0; i < w.Length; i++)
+            {
+                roll -= w[i];
+                if (roll <= 0) return i;
+            }
+            return w.Length - 1;
+        }
+
         public int SizeOf(string monsterId) => Math.Max(1, db.GetMonster(monsterId).size);
 
         /// <summary>편성 정의를 굴려 1번 칸부터 몬스터 목록을 만든다.</summary>
@@ -74,7 +108,7 @@ namespace Grimward.Domain.Combat
         {
             var e = db.GetEncounter(encounterId);
             if (e.variants != null && e.variants.Length > 0)
-                e = db.GetEncounter(e.variants[random.NextInt(0, e.variants.Length - 1)]);
+                e = db.GetEncounter(e.variants[PickVariant(e, random)]);
             var result = new List<Combatant>();
             foreach (var slot in e.slots)
             {

@@ -94,6 +94,9 @@ namespace Grimward.Domain.Data
                         }
                         else errors.Add($"몬스터 {m.id}: 패시브 kind '{p.kind}'");
                     }
+                if (m.immunities != null)
+                    foreach (var im in m.immunities)
+                        if (!DataKeys.IsResistKind(im)) errors.Add($"몬스터 {m.id}: 면역 '{im}'");
                 if (m.types != null)
                     foreach (var t in m.types)
                         if (!monsterTypes.ContainsKey(t)) errors.Add($"몬스터 {m.id}: 타입 '{t}' 없음");
@@ -120,6 +123,9 @@ namespace Grimward.Domain.Data
                         if (!encounters.TryGetValue(v, out var ve)) errors.Add($"편성 {e.id}: 변형 '{v}' 없음");
                         else if (ve.variants != null && ve.variants.Length > 0) errors.Add($"편성 {e.id}: 변형 '{v}'가 다시 변형을 가짐");
                     }
+                    if (e.variantWeights != null && e.variantWeights.Length > 0 &&
+                        (e.variantWeights.Length != e.variants.Length || e.variantWeights.Any(x => x < 0)))
+                        errors.Add($"편성 {e.id}: 가중치 수가 변형 수와 다르거나 음수");
                     continue;
                 }
                 if (e.slots == null || e.slots.Length == 0 || e.slots.Length > ranks)
@@ -158,7 +164,9 @@ namespace Grimward.Domain.Data
             if (s.effects != null)
                 foreach (var e in s.effects)
                 {
-                    if (e.kind != DataKeys.EffectKind.Stat && e.kind != DataKeys.EffectKind.Poison)
+                    if (e.kind != DataKeys.EffectKind.Stat && e.kind != DataKeys.EffectKind.Poison &&
+                        e.kind != DataKeys.EffectKind.Bleed && e.kind != DataKeys.EffectKind.Burn &&
+                        e.kind != DataKeys.EffectKind.Stun)
                         errors.Add($"{p}: 효과 kind '{e.kind}'");
                     if (e.duration <= 0) errors.Add($"{p}: 효과 지속 0 이하");
                     if (e.target != DataKeys.EffectTarget.Target && e.target != DataKeys.EffectTarget.Self &&
@@ -166,13 +174,22 @@ namespace Grimward.Domain.Data
                         errors.Add($"{p}: 효과 target '{e.target}'");
                     if (e.kind == DataKeys.EffectKind.Stat && !IsKnownStat(e.stat))
                         errors.Add($"{p}: 효과 stat '{e.stat}'");
+                    if (e.chance < 0 || e.chance > 1) errors.Add($"{p}: 효과 확률은 0~1");
                 }
+            if (s.steal && s.target != DataKeys.Target.Enemy) errors.Add($"{p}: 약탈은 적 대상 기술만");
+            if (s.variance < 0 || s.variance >= 1) errors.Add($"{p}: 편차는 0 이상 1 미만");
+            if (s.weights != null && (s.weights.strength < 0 || s.weights.dexterity < 0 || s.weights.intelligence < 0))
+                errors.Add($"{p}: 가중치 음수");
+            if (!string.IsNullOrEmpty(s.damageType) && s.damageType != DataKeys.DamageType.Physical &&
+                s.damageType != DataKeys.DamageType.Magical)
+                errors.Add($"{p}: damageType '{s.damageType}'");
         }
 
         private static bool IsKnownStat(string stat) =>
             stat == DataKeys.Stat.DamagePct || stat == DataKeys.Stat.Accuracy || stat == DataKeys.Stat.Crit ||
             stat == DataKeys.Stat.Dodge || stat == DataKeys.Stat.Speed || stat == DataKeys.Stat.DamageTaken ||
-            stat == DataKeys.Stat.MaxHpPct || stat == DataKeys.Stat.Armor;
+            stat == DataKeys.Stat.MaxHpPct || stat == DataKeys.Stat.Armor || stat == DataKeys.Stat.FormationResist ||
+            stat == DataKeys.Stat.StunResist || stat == DataKeys.Stat.MagicResist;
 
         private void CheckSkillRefs(List<string> errors, string owner, string[] ids)
         {

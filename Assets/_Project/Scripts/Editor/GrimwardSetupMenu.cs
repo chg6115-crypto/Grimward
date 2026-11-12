@@ -96,6 +96,31 @@ namespace Grimward.EditorTools
             Debug.Log("Grimward: BattleTest UI를 다시 만들었습니다.");
         }
 
+        [MenuItem("Grimward/전투 연출 추가 (기존 BattleTest UI 유지)", priority = 3)]
+        public static void AddBattleEffects()
+        {
+            var screen = Object.FindAnyObjectByType<BattleScreen>(FindObjectsInactive.Include);
+            if (screen == null)
+            {
+                Debug.LogError("Grimward: 열린 씬에 BattleScreen이 없습니다. BattleTest 씬을 열고 다시 실행하세요.");
+                return;
+            }
+            if (screen.HasEffects)
+            {
+                Debug.Log("Grimward: 이미 전투 연출(Panel_FloatingText)이 연결되어 있습니다.");
+                return;
+            }
+            UiBuild.Font = GetOrCreateFont();
+            var panel = screen.transform;
+            var top = panel.Find("Panel_Top") ?? panel;
+            BuildEffects(panel, top, screen);
+            var tip = panel.Find("Panel_Tooltip");
+            if (tip != null) tip.SetAsLastSibling();   // 툴팁은 항상 맨 위
+            EditorUtility.SetDirty(screen);
+            EditorSceneManager.MarkSceneDirty(screen.gameObject.scene);
+            Debug.Log("Grimward: 떠오르는 글자(Panel_FloatingText)와 속도 버튼(Btn_Speed)을 추가했습니다. 씬을 저장하세요.");
+        }
+
         [MenuItem("Grimward/게임 데이터 검증", priority = 20)]
         public static void ValidateData()
         {
@@ -220,6 +245,7 @@ namespace Grimward.EditorTools
             var restart = UiBuild.Button("Btn_Restart", result.transform, "새 전투", 26, new Vector2(.3f, .08f), new Vector2(.7f, .28f));
             result.gameObject.SetActive(false);
 
+            BuildEffects(panel, top, screen);
             var tip = BuildTooltip(panel);
 
             screen.Assign(round, turn, flee, info, partySlots, enemySlots, hero, bagLog.gameObject, bag, log, detail, tip,
@@ -321,6 +347,31 @@ namespace Grimward.EditorTools
             var view = p.gameObject.AddComponent<CombatantInfoView>();
             view.Assign(name, hp, stats, detail, close);
             return view;
+        }
+
+        /// <summary>떠오르는 글자 묶음(미리 12개)과 연출 속도 버튼.</summary>
+        private static void BuildEffects(Transform panel, Transform top, BattleScreen screen)
+        {
+            var layerRect = UiBuild.Rect("Panel_FloatingText", panel, Vector2.zero, Vector2.one);
+            var views = new FloatingTextView[12];
+            for (int i = 0; i < views.Length; i++)
+            {
+                var text = UiBuild.Text($"Txt_Float{i + 1}", layerRect, "", 34, new Vector2(.5f, .5f), new Vector2(.5f, .5f),
+                    TextAlignmentOptions.Center);
+                text.rectTransform.sizeDelta = new Vector2(320f, 60f);
+                text.fontStyle = FontStyles.Bold;
+                text.textWrappingMode = TextWrappingModes.NoWrap;
+                text.overflowMode = TextOverflowModes.Overflow;
+                views[i] = text.gameObject.AddComponent<FloatingTextView>();
+                views[i].Assign(text);
+                text.gameObject.SetActive(false);
+            }
+            var layer = layerRect.gameObject.AddComponent<FloatingTextLayer>();
+            layer.Assign(views);
+
+            var speed = UiBuild.Button("Btn_Speed", top, "속도 ×1", 20, new Vector2(.8f, .15f), new Vector2(.885f, .85f));
+            var label = speed.GetComponentInChildren<TMP_Text>();
+            screen.AssignEffects(layer, speed, label);
         }
 
         private static TooltipView BuildTooltip(Transform panel)

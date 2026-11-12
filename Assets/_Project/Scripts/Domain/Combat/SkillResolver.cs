@@ -85,12 +85,14 @@ namespace Grimward.Domain.Combat
                 int rolled = RollBase(actor, skill);
                 double dmgMod = level.damage + actor.Effects.Sum(DataKeys.Stat.DamagePct, target.Types) +
                                 TypeBonus(skill, target);
-                double armor = skill.ignoreArmor ? 0 : target.EffectiveArmor;
+                bool magical = skill.damageType == DataKeys.DamageType.Magical;
+                double armor = skill.ignoreArmor ? 0 : Math.Max(0, magical ? target.EffectiveMagicResist : target.EffectiveArmor);
                 double reduction = CombatFormulas.Reduction(cfg, armor, target.Effects.Sum(DataKeys.Stat.DamageTaken));
                 int damage = CombatFormulas.Damage(cfg, rolled, dmgMod, crit, reduction);
                 int dealt = target.TakeDamage(damage);
                 ctx.Emit(new BattleEvent(BattleEventKind.Damaged,
                     $"  {target.Name}에게 {dealt} 피해{(crit ? " (치명타!)" : "")}", actor, target, dealt, crit));
+                ThiefRules.OnHit(ctx, actor, skill);
                 if (!target.IsAlive) { ReportDeath(target); return; }
                 if (dealt > 0) InjuryRules.OnHit(ctx, skill, target, crit);
             }
@@ -104,7 +106,8 @@ namespace Grimward.Domain.Combat
             var fixedDmg = skill.fixedDamage;
             if (fixedDmg != null && fixedDmg.max > 0)
                 return ctx.Random.NextInt(fixedDmg.min, fixedDmg.max) + actor.Intelligence * fixedDmg.intelligenceMultiplier;
-            return ctx.Random.NextInt(actor.AttackMin, actor.AttackMax);
+            CombatFormulas.DamageRange(ctx.Config, actor, skill, out int min, out int max);
+            return ctx.Random.NextInt(min, max);
         }
 
         private static double TypeBonus(SkillDefinition skill, Combatant target)
@@ -118,7 +121,8 @@ namespace Grimward.Domain.Combat
             if (skill.heal != null && skill.heal.max > 0)
             {
                 int amount = ctx.Random.NextInt(skill.heal.min, skill.heal.max);
-                if (skill.heal.intelligenceDivisor > 0) amount += actor.Intelligence / skill.heal.intelligenceDivisor;
+                if (skill.weights != null && skill.weights.Sum > 0) amount += CombatFormulas.StatBonus(ctx.Config, actor, skill.weights);
+                else if (skill.heal.intelligenceDivisor > 0) amount += actor.Intelligence / skill.heal.intelligenceDivisor;
                 int healed = target.Heal(amount);
                 ctx.Emit(new BattleEvent(BattleEventKind.Healed, $"  {target.Name} HP +{healed}", actor, target, healed));
             }
@@ -142,12 +146,57 @@ namespace Grimward.Domain.Combat
         private void ApplyEffects(Combatant actor, SkillDefinition skill, Combatant holder, string effectTarget)
         {
             if (skill.effects == null || !holder.IsAlive) return;
+            bool hostile = skill.target == DataKeys.Target.Enemy && effectTarget == DataKeys.EffectTarget.Target;
             foreach (var def in skill.effects)
             {
                 if (def.target != effectTarget) continue;
+                if (hostile && !RollStatus(actor, holder, def)) continue;
+                if (def.kind == DataKeys.EffectKind.Stun && holder.Effects.HasStun) continue; // 기절은 겹치지 않는다
                 holder.Effects.Apply(new ActiveEffect(skill.id, skill.name, def), holder == ctx.CurrentActor);
+                if (def.kind == DataKeys.EffectKind.Stun) ThiefRules.Delay(ctx, holder, "기절");
+                string length = def.kind == DataKeys.EffectKind.Stun ? "" : $" ({def.duration}라운드)";
                 ctx.Emit(new BattleEvent(BattleEventKind.EffectApplied,
-                    $"  {holder.Name}: {DescribeEffect(def)} ({def.duration}라운드)", actor, holder));
+                    $"  {holder.Name}: {DescribeEffect(def)}{length}", actor, holder));
+            }
+        }
+
+        /// <summary>적에게 거는 효과: 면역이면 실패, 아니면 (기술 확률 − 대상 저항)으로 굴린다.</summary>
+        private bool RollStatus(Combatant actor, Combatant target, EffectDefinition def)
+        {
+            string kind = ResistKindOf(def);
+            if (target.IsImmune(kind))
+            {
+                ctx.Emit(new BattleEvent(BattleEventKind.StatusResisted, $"  {target.Name}: {ResistName(kind)} 면역", actor, target));
+                return false;
+            }
+            double chance = (def.chance > 0 ? def.chance : 1.0) - target.Resist(kind);
+            if (ctx.Random.NextDouble() < chance) return true;
+            ctx.Emit(new BattleEvent(BattleEventKind.StatusResisted, $"  {target.Name}: {ResistName(kind)} 저항", actor, target));
+            return false;
+        }
+
+        public static string ResistKindOf(EffectDefinition def)
+        {
+            switch (def.kind)
+            {
+                case DataKeys.EffectKind.Stun: return DataKeys.Resist.Stun;
+                case DataKeys.EffectKind.Poison: return DataKeys.Resist.Poison;
+                case DataKeys.EffectKind.Bleed: return DataKeys.Resist.Bleed;
+                case DataKeys.EffectKind.Burn: return DataKeys.Resist.Burn;
+                default: return DataKeys.Resist.Debuff;
+            }
+        }
+
+        public static string ResistName(string kind)
+        {
+            switch (kind)
+            {
+                case DataKeys.Resist.Stun: return "기절";
+                case DataKeys.Resist.Poison: return "중독";
+                case DataKeys.Resist.Bleed: return "출혈";
+                case DataKeys.Resist.Burn: return "화상";
+                case DataKeys.Resist.Debuff: return "약화";
+                default: return kind;
             }
         }
 
@@ -162,7 +211,7 @@ namespace Grimward.Domain.Combat
                     $"  {guard.Name}의 「{passive}」: {target.Name}을(를) 움직일 수 없다", guard, target));
                 return;
             }
-            double chance = skill.displacement.chance - target.FormationResist;
+            double chance = skill.displacement.chance - target.EffectiveFormationResist;
             if (ctx.Random.NextDouble() >= chance)
             {
                 ctx.Emit(new BattleEvent(BattleEventKind.DisplaceResisted, $"  {target.Name}: 진형 붕괴 저항", null, target));
@@ -171,8 +220,11 @@ namespace Grimward.Domain.Combat
             int before = ctx.Formation.RankOf(target);
             int after = ctx.Formation.Shift(target, skill.displacement.ranks);
             if (after != before)
+            {
                 ctx.Emit(new BattleEvent(BattleEventKind.Displaced,
                     $"  {target.Name}: {before}번 → {after}번 칸", null, target, after));
+                ThiefRules.Delay(ctx, target, "진형 붕괴");
+            }
         }
 
         private void Summon(Combatant actor, SkillDefinition skill)
@@ -200,14 +252,20 @@ namespace Grimward.Domain.Combat
 
         private void ReportDeath(Combatant target)
         {
-            ctx.Emit(new BattleEvent(BattleEventKind.Died, $"  {target.Name} 쓰러짐", null, target));
+            ctx.Emit(new BattleEvent(BattleEventKind.Died, $"  {target.Name} {FallText(target)}", null, target));
             if (target.Side == BattleSide.Enemy) ctx.KilledMonsterIds.Add(target.DefinitionId);
+            ThiefRules.OnDeath(ctx, target);
         }
+
+        /// <summary>HP 0: 모험가는 전투불능(전투 후 처리), 몬스터는 쓰러짐.</summary>
+        public static string FallText(Combatant c) => c.Side == BattleSide.Party ? "전투불능" : "쓰러짐";
 
         public static string DescribeEffect(EffectDefinition def)
         {
             if (def.kind == DataKeys.EffectKind.Poison) return $"중독(차례마다 {def.damagePerTurn})";
             if (def.kind == DataKeys.EffectKind.Bleed) return $"출혈(차례마다 {def.damagePerTurn})";
+            if (def.kind == DataKeys.EffectKind.Burn) return $"화상(차례마다 {def.damagePerTurn})";
+            if (def.kind == DataKeys.EffectKind.Stun) return "기절(다음 차례 건너뜀)";
             string sign = def.value >= 0 ? "+" : "";
             switch (def.stat)
             {
@@ -219,6 +277,9 @@ namespace Grimward.Domain.Combat
                 case DataKeys.Stat.DamageTaken: return $"받는 피해 {sign}{def.value * 100:0}%";
                 case DataKeys.Stat.Armor: return $"방어도 {sign}{def.value * 100:0}%";
                 case DataKeys.Stat.MaxHpPct: return $"최대 HP {sign}{def.value * 100:0}%";
+                case DataKeys.Stat.FormationResist: return $"진형 붕괴 저항 {sign}{def.value * 100:0}%p";
+                case DataKeys.Stat.StunResist: return $"기절 저항 {sign}{def.value * 100:0}%p";
+                case DataKeys.Stat.MagicResist: return $"마법 저항 {sign}{def.value * 100:0}%p";
                 default: return def.stat;
             }
         }

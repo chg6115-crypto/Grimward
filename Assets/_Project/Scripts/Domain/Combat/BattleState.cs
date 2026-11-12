@@ -54,6 +54,7 @@ namespace Grimward.Domain.Combat
             resolver = new SkillResolver(ctx);
             ai = new EnemyAI(ctx);
             Inventory = inventory ?? new BattleInventory();
+            ctx.Inventory = Inventory;
         }
 
         /// <summary>모험가 목록(1번 칸부터)과 편성 ID로 전투를 만든다.</summary>
@@ -163,7 +164,12 @@ namespace Grimward.Domain.Combat
         {
             RequirePhase(BattlePhase.EnemyTurn);
             var decision = ai.Decide(CurrentActor);
-            if (decision.Skill != null) resolver.Resolve(CurrentActor, decision.Skill, decision.Target);
+            if (decision.Thief == EnemyDecision.ThiefAction.Run) ThiefRules.StartRun(ctx, CurrentActor);
+            else if (decision.Thief == EnemyDecision.ThiefAction.Escape) ThiefRules.Escape(ctx, CurrentActor);
+            else if (decision.Thief == EnemyDecision.ThiefAction.Wait)
+                ctx.Emit(new BattleEvent(BattleEventKind.Passed,
+                    $"{CurrentActor.Name}: 도주 준비 ({CurrentActor.EscapeRound}라운드에 도주)", CurrentActor));
+            else if (decision.Skill != null) resolver.Resolve(CurrentActor, decision.Skill, decision.Target);
             else if (decision.MoveDelta != 0) DoMove(decision.MoveDelta);
             else ctx.Emit(new BattleEvent(BattleEventKind.Passed, $"{CurrentActor.Name}: 대기", CurrentActor));
             FinishTurn();
@@ -217,7 +223,8 @@ namespace Grimward.Domain.Combat
 
                 int poison = next.Effects.PoisonDamage();
                 int bleed = next.Effects.BleedDamage();
-                if (poison > 0 || bleed > 0)
+                int burn = next.Effects.BurnDamage();
+                if (poison > 0 || bleed > 0 || burn > 0)
                 {
                     if (poison > 0)
                     {
@@ -229,15 +236,36 @@ namespace Grimward.Domain.Combat
                         int dealt = next.TakeDamage(bleed);
                         ctx.Emit(new BattleEvent(BattleEventKind.BleedTicked, $"  {next.Name} 출혈 피해 {dealt}", null, next, dealt));
                     }
+                    if (burn > 0 && next.IsAlive)
+                    {
+                        int dealt = next.TakeDamage(burn);
+                        ctx.Emit(new BattleEvent(BattleEventKind.BurnTicked, $"  {next.Name} 화상 피해 {dealt}", null, next, dealt));
+                    }
                     if (!next.IsAlive)
                     {
-                        ctx.Emit(new BattleEvent(BattleEventKind.Died, $"  {next.Name} 쓰러짐", null, next));
+                        ctx.Emit(new BattleEvent(BattleEventKind.Died, $"  {next.Name} {SkillResolver.FallText(next)}", null, next));
                         if (next.Side == BattleSide.Enemy) ctx.KilledMonsterIds.Add(next.DefinitionId);
+                        ThiefRules.OnDeath(ctx, next);
                         Formation.Compact();
                         PassiveRules.RefreshAuras(ctx);
                         if (CheckEnd()) return;
                         continue;
                     }
+                }
+
+                if (next.Effects.HasStun)
+                {
+                    // 기절: 이번 차례를 넘기고, 다음 자기 차례가 끝날 때까지 기절 저항 가산
+                    next.Effects.RemoveStun();
+                    ctx.Emit(new BattleEvent(BattleEventKind.Stunned, $"  {next.Name}: 기절 — 차례를 넘김", null, next));
+                    next.Effects.TickEndOfOwnTurn();
+                    if (ctx.Config.stunRecoveryResist > 0)
+                        next.Effects.Apply(new ActiveEffect("stun_recovery", "기절 회복", new EffectDefinition
+                        {
+                            kind = DataKeys.EffectKind.Stat, stat = DataKeys.Stat.StunResist,
+                            value = ctx.Config.stunRecoveryResist, duration = 1, target = DataKeys.EffectTarget.Target
+                        }), false);
+                    continue;
                 }
 
                 Phase = next.Side == BattleSide.Party ? BattlePhase.PlayerTurn : BattlePhase.EnemyTurn;
@@ -266,24 +294,67 @@ namespace Grimward.Domain.Combat
             Outcome = outcome;
             Phase = BattlePhase.Ended;
             ctx.CurrentActor = null;
-            WriteBackParty();
+            WriteBackParty(outcome);
             string text = outcome == BattleOutcome.Victory ? "승리" : outcome == BattleOutcome.Defeat ? "전멸" : "도주";
             ctx.Emit(new BattleEvent(BattleEventKind.Ended, $"전투 종료: {text}"));
         }
 
-        /// <summary>전투 종료: 효과 해제, HP와 사망을 모험가에게 되돌려 쓴다.</summary>
-        private void WriteBackParty()
+        /// <summary>
+        /// 전투 종료: 효과 해제, HP·부상을 모험가에게 되돌려 쓴다.
+        /// 전투불능(HP 0): 전멸이면 전원 사망. 승리·도주면 HP 1로 일어나며 중상 하나 —
+        /// 단, 이번 출정에서 이미 한 번 전투불능이었거나 더 받을 중상이 없으면(중상 가득) 영구 사망.
+        /// </summary>
+        private void WriteBackParty(BattleOutcome outcome)
         {
             foreach (var c in partyMembers.Concat(Formation.Side(BattleSide.Enemy)))
                 c.Effects.Clear();
             foreach (var c in partyMembers)
             {
                 if (c.Source == null) continue;
-                c.Source.CurrentHp = c.Hp;
-                if (!c.IsAlive) c.Source.IsDead = true;
-                c.Source.Injuries.Clear();
-                c.Source.Injuries.AddRange(c.Injuries.Select(i => i.Clone()));
+                var a = c.Source;
+                a.Injuries.Clear();
+                a.Injuries.AddRange(c.Injuries.Select(i => i.Clone()));
+                a.CurrentHp = c.Hp;
+                if (c.IsAlive) continue;
+
+                string deathReason = outcome == BattleOutcome.Defeat ? "전멸"
+                    : a.KnockdownsThisExpedition >= 1 ? "이번 출정 두 번째 전투불능"
+                    : !CanTakeSevere(a) ? "더 받을 수 있는 부상이 없음 (중상 가득)"
+                    : null;
+                if (deathReason != null)
+                {
+                    a.IsDead = true;
+                    ctx.Emit(new BattleEvent(BattleEventKind.KnockedDown, $"{a.Name} 사망 ({deathReason})", null, c));
+                    continue;
+                }
+                a.KnockdownsThisExpedition++;
+                a.CurrentHp = 1;
+                string injury = InflictSevere(a);
+                ctx.Emit(new BattleEvent(BattleEventKind.KnockedDown,
+                    $"{a.Name}: 전투불능에서 일어남 (HP 1{(injury != null ? $", 「{injury}」" : "")}) — 이번 출정에서 다시 쓰러지면 사망",
+                    null, c));
             }
+        }
+
+        private List<InjuryDefinition> SevereCandidates(Adventurer a) =>
+            db.Injuries
+                .Where(d => a.Injuries.Any(i => i.Id == d.id && !i.Severe) ||
+                            (a.Injuries.All(i => i.Id != d.id) && a.Injuries.Count < ctx.Config.injuryMaxPerAdventurer))
+                .ToList();
+
+        /// <summary>중상을 하나 더 받을 수 있는가. 없으면(중상 가득) 전투불능 = 사망.</summary>
+        private bool CanTakeSevere(Adventurer a) => SevereCandidates(a).Count > 0;
+
+        /// <summary>전투불능 후유증: 중상 하나. 아직 중상이 아닌 부상 중에서 고른다(빈 자리가 있으면 새 종류도 후보).</summary>
+        private string InflictSevere(Adventurer a)
+        {
+            var candidates = SevereCandidates(a);
+            if (candidates.Count == 0) return null;
+            var pick = candidates[ctx.Random.NextInt(0, candidates.Count - 1)];
+            var existing = a.Injuries.FirstOrDefault(i => i.Id == pick.id);
+            if (existing != null) existing.Severe = true;
+            else a.Injuries.Add(new InjuryState(pick.id, true));
+            return db.InjuryStageName(pick.id, true);
         }
 
         private void RequirePhase(BattlePhase phase)

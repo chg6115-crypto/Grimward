@@ -40,6 +40,8 @@ namespace Grimward.Domain.Combat
         public string Key => SourceSkillId + "|" + Kind + "|" + Stat;
         public bool IsPoison => Kind == DataKeys.EffectKind.Poison;
         public bool IsBleed => Kind == DataKeys.EffectKind.Bleed;
+        public bool IsBurn => Kind == DataKeys.EffectKind.Burn;
+        public bool IsStun => Kind == DataKeys.EffectKind.Stun;
         /// <summary>부상에서 온 효과 (출혈 포함). SourceSkillId = "injury:{부상 id}".</summary>
         public bool IsInjury => SourceSkillId != null && SourceSkillId.StartsWith(InjuryPrefix);
         public const string InjuryPrefix = "injury:";
@@ -85,6 +87,9 @@ namespace Grimward.Domain.Combat
 
         public int PoisonDamage() => effects.Where(e => e.IsPoison).Sum(e => e.DamagePerTurn);
         public int BleedDamage() => effects.Where(e => e.IsBleed).Sum(e => e.DamagePerTurn);
+        public int BurnDamage() => effects.Where(e => e.IsBurn).Sum(e => e.DamagePerTurn);
+        public bool HasStun => effects.Any(e => e.IsStun);
+        public void RemoveStun() => effects.RemoveAll(e => e.IsStun);
 
         /// <summary>조건에 맞는 효과(패시브 포함)를 모두 지운다.</summary>
         public void RemoveAll(System.Predicate<ActiveEffect> match) => effects.RemoveAll(match);

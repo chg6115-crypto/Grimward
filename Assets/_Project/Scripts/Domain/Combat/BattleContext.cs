@@ -19,6 +19,8 @@ namespace Grimward.Domain.Combat
         public List<string> KilledMonsterIds { get; } = new List<string>();
         /// <summary>("편|기술 id") → 마지막으로 쓴 라운드. 같은 편이 한 라운드에 같은 강화 기술을 겹쳐 쓰지 않게 할 때 쓴다.</summary>
         public Dictionary<string, int> LastSkillRound { get; } = new Dictionary<string, int>();
+        /// <summary>파티 가방 (약탈·되찾기용).</summary>
+        public BattleInventory Inventory { get; internal set; }
 
         public static string SkillRoundKey(BattleSide side, string skillId) => side + "|" + skillId;
 

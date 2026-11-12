@@ -13,6 +13,18 @@ namespace Grimward.Domain.Combat
         PoisonCured,
         BleedTicked,
         BleedStopped,
+        BurnTicked,
+        /// <summary>상태이상 저항·면역.</summary>
+        StatusResisted,
+        /// <summary>기절로 차례를 넘김.</summary>
+        Stunned,
+        /// <summary>전투 후 처리: 전투불능에서 일어남 / 영구 사망.</summary>
+        KnockedDown,
+        /// <summary>소매치기: 아이템 약탈 / 도주 지연 / 도주 성공 / 처치로 되찾음.</summary>
+        Stole,
+        EscapeDelayed,
+        Escaped,
+        ItemRecovered,
         Injured,
         InjuryTreated,
         Displaced,

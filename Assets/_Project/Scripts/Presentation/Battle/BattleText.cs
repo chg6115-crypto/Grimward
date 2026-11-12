@@ -29,11 +29,15 @@ namespace Grimward.Presentation.Battle
             {
                 if (e.IsBleed) { sb.Append("<color=#e55>출혈</color> "); continue; }
                 if (e.IsInjury) continue; // 부상 능력치 효과는 아래 「부상」 표시로 묶는다
+                if (e.IsStun) { sb.Append("<color=#fd5>기절</color> "); continue; }
+                if (e.IsBurn) { sb.Append("<color=#f93>화상</color> "); continue; }
                 if (e.IsPoison) sb.Append("<color=#7d7>독</color> ");
                 else if (e.Value >= 0 == (e.Stat != DataKeys.Stat.DamageTaken)) sb.Append("<color=#7bf>▲</color>");
                 else sb.Append("<color=#f88>▼</color>");
             }
             if (c.Injuries.Count > 0) sb.Append(" <color=#e77>부상</color>");
+            if (c.EscapeRound > 0) sb.Append($" <color=#fd5>도주 {c.EscapeRound}R</color>");
+            else if (c.StolenItems.Count > 0) sb.Append(" <color=#e77>약탈</color>");
             return sb.ToString();
         }
 
@@ -50,11 +54,23 @@ namespace Grimward.Presentation.Battle
                 $"HP{tab}{c.Hp} / {c.MaxHp}\n" +
                 $"명중{tab}{acc}\n" +
                 $"치명타{tab}{crit * 100:0.#}%\n" +
-                $"피해{tab}{c.AttackMin}-{c.AttackMax}\n" +
+                (c.Side == BattleSide.Party ? $"무기{tab}{c.WeaponMin}-{c.WeaponMax}\n" : $"피해{tab}{c.AttackMin}-{c.AttackMax}\n") +
                 $"회피{tab}{dodge}\n" +
                 $"방어{tab}{c.EffectiveArmor * 100:0.#}%{(ward != 0 ? $" (+{ward * 100:0}%)" : "")}\n" +
                 $"속도{tab}{speed}\n" +
-                $"진형 저항{tab}{c.FormationResist * 100:0}%";
+                $"진형 저항{tab}{c.EffectiveFormationResist * 100:0}%";
+        }
+
+        /// <summary>상태이상 저항·마법 저항·면역. 확률 = 기술 확률 − 저항.</summary>
+        public static string Resists(Combatant c)
+        {
+            // 능력치 칸과 같은 정렬: 두 항목씩 3줄
+            string P(string k) => c.IsImmune(k) ? "<color=#eb4>면역</color>" : $"{c.Resist(k) * 100:0}%";
+            const string v1 = "<pos=24%>", k2 = "<pos=48%>", v2 = "<pos=72%>";
+            return
+                $"기절{v1}{P(DataKeys.Resist.Stun)}{k2}중독{v2}{P(DataKeys.Resist.Poison)}\n" +
+                $"출혈{v1}{P(DataKeys.Resist.Bleed)}{k2}화상{v2}{P(DataKeys.Resist.Burn)}\n" +
+                $"약화{v1}{P(DataKeys.Resist.Debuff)}{k2}마법{v2}{System.Math.Max(0, c.EffectiveMagicResist) * 100:0}%";
         }
 
         public static string Effects(Combatant c)
@@ -63,6 +79,8 @@ namespace Grimward.Presentation.Battle
             return string.Join("\n", c.Effects.All.Select(e =>
                 e.IsPoison ? $"<color=#7d7>중독</color> 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드"
                     : e.IsBleed ? $"<color=#e55>출혈</color> ({e.SourceSkillName}) 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드"
+                    : e.IsBurn ? $"<color=#f93>화상</color> ({e.SourceSkillName}) 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드"
+                    : e.IsStun ? $"<color=#fd5>기절</color> ({e.SourceSkillName}) 다음 차례를 건너뜀"
                     : e.IsInjury ? $"<color=#e77>{e.SourceSkillName}</color>: {StatLabel(e)} · 부상"
                     : e.IsPassive ? $"<color=#eb4>{e.SourceSkillName}</color>: {StatLabel(e)} · 패시브"
                     : $"{e.SourceSkillName}: {StatLabel(e)} · {e.Remaining}라운드"));
@@ -108,7 +126,8 @@ namespace Grimward.Presentation.Battle
         }
 
         /// <summary>기술 툴팁 (다키스트 던전 방식): 이름·레벨 · 종류 · 사용/대상 칸 · 보정 · 효과 · 설명.</summary>
-        public static string SkillTooltip(SkillDefinition s, int level, GameDatabase db, bool forEnemy = false)
+        public static string SkillTooltip(SkillDefinition s, int level, GameDatabase db, bool forEnemy = false,
+            Combatant user = null)
         {
             var lv = SkillTargeting.LevelOf(s, level);
             var sb = new StringBuilder();
@@ -124,8 +143,18 @@ namespace Grimward.Presentation.Battle
             if (s.target == DataKeys.Target.Enemy)
             {
                 sb.Append($"명중 보정: {lv.accuracy:+0;-0;0}\n");
+                if (s.damaging && user != null && (s.fixedDamage == null || s.fixedDamage.max <= 0))
+                {
+                    CombatFormulas.DamageRange(db.Balance, user, s, out int min, out int max);
+                    sb.Append($"<b>피해 {min}~{max}</b>");
+                    if (s.variance > 0) sb.Append($" <size=80%><color=#999>{VarianceName(s.variance)} ±{s.variance * 100:0}%</color></size>");
+                    sb.Append("\n");
+                }
+                if (s.weights != null && s.weights.Sum > 0) sb.Append($"<size=85%><color=#aaa>{Weights(s.weights)}</color></size>\n");
                 if (s.damaging) sb.Append($"피해 보정: {lv.damage * 100:+0;-0;0}%\n");
                 if (s.damaging) sb.Append($"치명타 보정: {lv.crit * 100:+0.#;-0.#;0}%\n");
+                if (s.damaging && s.damageType == DataKeys.DamageType.Magical)
+                    sb.Append("<color=#9cf>마법 피해</color> <size=80%><color=#999>(방어도 대신 마법 저항)</color></size>\n");
                 if (s.ignoreArmor) sb.Append("대상 방어도 무시\n");
                 if (s.fixedDamage != null && s.fixedDamage.max > 0)
                     sb.Append($"피해 {s.fixedDamage.min}~{s.fixedDamage.max}" +
@@ -135,8 +164,14 @@ namespace Grimward.Presentation.Battle
                 foreach (var b in s.typeBonuses)
                     sb.Append($"<color=#eb4>{db.TypeName(b.type)}</color>에게 피해 {b.damage * 100:+0;-0}%\n");
             if (s.heal != null && s.heal.max > 0)
-                sb.Append($"회복 {s.heal.min}{(s.heal.max > s.heal.min ? $"~{s.heal.max}" : "")}" +
-                          (s.heal.intelligenceDivisor > 0 ? $" + 지능÷{s.heal.intelligenceDivisor}" : "") + "\n");
+            {
+                bool weighted = s.weights != null && s.weights.Sum > 0;
+                int bonus = weighted && user != null ? CombatFormulas.StatBonus(db.Balance, user, s.weights) : 0;
+                sb.Append($"회복 {s.heal.min + bonus}{(s.heal.max > s.heal.min ? $"~{s.heal.max + bonus}" : "")}" +
+                          (!weighted && s.heal.intelligenceDivisor > 0 ? $" + 지능÷{s.heal.intelligenceDivisor}" : "") + "\n");
+                if (weighted && s.target != DataKeys.Target.Enemy)
+                    sb.Append($"<size=85%><color=#aaa>{Weights(s.weights)}</color></size>\n");
+            }
             if (s.curePoison) sb.Append("해독\n");
             if (s.displacement != null && s.displacement.ranks != 0)
                 sb.Append($"<color=#c9f>{(s.displacement.ranks > 0 ? "밀어내기" : "끌어당기기")} {System.Math.Abs(s.displacement.ranks)}칸</color>" +
@@ -148,7 +183,10 @@ namespace Grimward.Presentation.Battle
                         : e.target == DataKeys.EffectTarget.AllAllies ? "아군 전체: "
                         : s.target == DataKeys.Target.Enemy ? "명중 시: " : "";
                     string doubled = string.IsNullOrEmpty(e.doubledVsType) ? "" : $" ({db.TypeName(e.doubledVsType)} 상대 2배)";
-                    sb.Append($"{who}{SkillResolver.DescribeEffect(e)}, {e.duration}라운드{doubled}\n");
+                    string length = e.kind == DataKeys.EffectKind.Stun ? "" : $", {e.duration}라운드";
+                    string chance = s.target == DataKeys.Target.Enemy && e.target == DataKeys.EffectTarget.Target
+                        ? $" <size=80%><color=#999>(기본 {(e.chance > 0 ? e.chance : 1) * 100:0}% − 저항)</color></size>" : "";
+                    sb.Append($"{who}{SkillResolver.DescribeEffect(e)}{length}{doubled}{chance}\n");
                 }
             if (s.injury != null && !string.IsNullOrEmpty(s.injury.injuryId))
                 sb.Append($"<color=#e77>부상: {db.InjuryStageName(s.injury.injuryId, false)} {s.injury.chance * 100:0}%</color>" +
@@ -176,13 +214,26 @@ namespace Grimward.Presentation.Battle
             "<align=center><b>이동</b>\n<size=85%><color=#a99>공통 행동</color></size></align>\n앞 또는 뒤로 1칸, 그 칸의 아군과 자리 교환\n행동 1회 소모";
 
         /// <summary>모험가 기본 능력치 줄 (근력 · 민첩 · 건강 · 지능 · 지각 · 매력).</summary>
-        public static string Attributes(Combatant c)
+        public static string VarianceName(double v) => v <= 0.15 ? "정밀" : v <= 0.35 ? "보통" : "거침";
+
+        /// <summary>"근력 2 · 민첩 1" (0은 생략).</summary>
+        public static string Weights(StatWeightDefinition w)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            if (w.strength > 0) parts.Add($"근력 {w.strength}");
+            if (w.dexterity > 0) parts.Add($"민첩 {w.dexterity}");
+            if (w.intelligence > 0) parts.Add($"지능 {w.intelligence}");
+            return string.Join(" · ", parts);
+        }
+
+        public static string Attributes(Combatant c, BalanceConfig cfg)
         {
             var a = c.Source;
             if (a == null) return "";
             const string tab = "<pos=48%>";
             return $"근력{tab}{a.Strength}\n민첩{tab}{a.Dexterity}\n건강{tab}{a.Vitality}\n" +
-                   $"지능{tab}{a.Intelligence}\n지각{tab}{a.Perception}\n매력{tab}{a.Charisma}";
+                   $"지능{tab}{a.Intelligence}\n지각{tab}{a.Perception}\n매력{tab}{a.Charisma}\n" +
+                   $"안정성{tab}{CombatFormulas.Stability(cfg, c.Perception) * 100:0}%";
         }
     }
 }

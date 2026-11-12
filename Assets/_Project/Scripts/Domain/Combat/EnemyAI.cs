@@ -20,6 +20,11 @@ namespace Grimward.Domain.Combat
         public static EnemyDecision UseSkill(SkillDefinition s, Combatant t) => new EnemyDecision(s, t, 0);
         public static EnemyDecision Move(int delta) => new EnemyDecision(null, null, delta);
         public static EnemyDecision Pass() => new EnemyDecision(null, null, 0);
+
+        /// <summary>소매치기: 약탈 직후 강제 도망 / 도주 준비 대기 / 도주.</summary>
+        public enum ThiefAction { None, Run, Wait, Escape }
+        public ThiefAction Thief { get; private set; }
+        public static EnemyDecision ForThief(ThiefAction a) => new EnemyDecision(null, null, 0) { Thief = a };
     }
 
     /// <summary>
@@ -34,6 +39,11 @@ namespace Grimward.Domain.Combat
 
         public EnemyDecision Decide(Combatant actor)
         {
+            // 소매치기: 약탈했으면 다음 행동은 반드시 도망, 도주 라운드가 되면 무조건 도주
+            if (actor.EscapeRound > 0)
+                return EnemyDecision.ForThief(ctx.Round >= actor.EscapeRound ? EnemyDecision.ThiefAction.Escape : EnemyDecision.ThiefAction.Wait);
+            if (actor.HasStolen) return EnemyDecision.ForThief(EnemyDecision.ThiefAction.Run);
+
             var usable = SkillTargeting.UsableSkills(ctx, actor).ToList();
             if (usable.Count == 0) return DecideMove(actor);
 
@@ -44,6 +54,9 @@ namespace Grimward.Domain.Combat
                     .Where(c => c.Hp <= c.MaxHp * ctx.Config.aiHealThreshold).OrderBy(c => c.Hp).FirstOrDefault();
                 if (wounded != null) return EnemyDecision.UseSkill(heal, wounded);
             }
+
+            var snatch = usable.FirstOrDefault(s => s.steal);
+            if (snatch != null) return EnemyDecision.UseSkill(snatch, Pick(SkillTargeting.ValidTargets(ctx, actor, snatch)));
 
             var summon = usable.FirstOrDefault(s => s.target == DataKeys.Target.AllySlot);
             if (summon != null) return EnemyDecision.UseSkill(summon, actor);

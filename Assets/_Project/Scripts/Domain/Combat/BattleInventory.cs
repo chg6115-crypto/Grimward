@@ -26,6 +26,9 @@ namespace Grimward.Domain.Combat
 
         public IEnumerable<KeyValuePair<string, int>> Entries => counts;
 
+        /// <summary>약탈되지 않는 아이템 (의뢰 아이템). M2에서 수락한 의뢰에 맞춰 채운다.</summary>
+        public HashSet<string> Protected { get; } = new HashSet<string>();
+
         /// <summary>가방 칸 배치: 아이템마다 stack 단위로 칸을 나눈다. 칸이 모자라면 남는 것은 표시하지 않는다.
         /// (M2에서 가방 규칙과 함께 Inventory로 옮긴다.)</summary>
         public List<KeyValuePair<string, int>> ToSlots(GameDatabase db, int slotCount)

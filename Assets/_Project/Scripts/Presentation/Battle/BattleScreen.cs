@@ -7,6 +7,7 @@ using Grimward.Domain.Data;
 using Grimward.Presentation.Common;
 using TMPro;
 using UnityEngine;
+using UnityEngine.InputSystem;
 using UnityEngine.UI;
 
 namespace Grimward.Presentation.Battle
@@ -46,7 +47,25 @@ namespace Grimward.Presentation.Battle
 
         [Header("연출")]
         [SerializeField] private float enemyTurnDelay = 0.6f;
+        [Header("자동 진행 (A 키로 켜고 끄기)")]
+        [Tooltip("파티 행동 사이 대기(초). 연출 속도 ×2면 절반")]
+        [SerializeField] private float autoActionDelay = 0.5f;
+        [Tooltip("전투가 끝난 뒤 다음 전투까지 대기(초)")]
+        [SerializeField] private float autoRestartDelay = 2f;
         [SerializeField] private int logLines = 9;
+        [SerializeField] private FloatingTextLayer floatingText;
+        [SerializeField] private Button speedButton;
+        [SerializeField] private TMP_Text speedLabel;
+        [Tooltip("연출 한 단계의 기본 시간(초). 속도 ×2면 절반")]
+        [SerializeField] private float stepTime = 0.3f;
+        [SerializeField] private Color damageColor = new Color(1f, 0.92f, 0.85f);
+        [SerializeField] private Color critColor = new Color(1f, 0.8f, 0.2f);
+        [SerializeField] private Color missColor = new Color(0.7f, 0.7f, 0.72f);
+        [SerializeField] private Color healColor = new Color(0.45f, 0.9f, 0.45f);
+        [SerializeField] private Color buffColor = new Color(0.5f, 0.75f, 1f);
+        [SerializeField] private Color debuffColor = new Color(1f, 0.55f, 0.5f);
+        [SerializeField] private Color injuryColor = new Color(1f, 0.4f, 0.35f);
+        private const string SpeedPrefKey = "grimward.battleSpeed";
 
         private BattleState battle;
         private GameDatabase db;
@@ -63,6 +82,10 @@ namespace Grimward.Presentation.Battle
         private int selectedSkill = -1;   // 0~3 기술, 4 이동
         private string selectedItem;
         private bool enemyRunning;
+        private bool playing;
+        private float speed = 1f;
+        private readonly Dictionary<CombatantSlotView, (int count, float time)> textStack =
+            new Dictionary<CombatantSlotView, (int, float)>();
 
         /// <summary>에디터 UI 빌더 전용.</summary>
         public void Assign(TMP_Text roundText, TMP_Text turnText, Button fleeButton, TMP_Text infoText,
@@ -76,6 +99,14 @@ namespace Grimward.Presentation.Battle
             this.tooltip = tooltip;
             this.resultPanel = resultPanel; this.resultText = resultText; this.restartButton = restartButton;
         }
+
+        /// <summary>에디터 UI 빌더 전용: 연출(떠오르는 글자 · 속도 버튼).</summary>
+        public void AssignEffects(FloatingTextLayer layer, Button speed, TMP_Text speedText)
+        {
+            floatingText = layer; speedButton = speed; speedLabel = speedText;
+        }
+
+        public bool HasEffects => floatingText != null;
 
         private void Awake()
         {
@@ -105,6 +136,15 @@ namespace Grimward.Presentation.Battle
                 view.OnStatusHoverEnd += ClearHover;
             }
             fleeButton.onClick.AddListener(() => { if (CanInput) Execute(battle.Flee); });
+            speed = PlayerPrefs.GetFloat(SpeedPrefKey, 1f) >= 2f ? 2f : 1f;
+            if (speedButton != null)
+                speedButton.onClick.AddListener(() =>
+                {
+                    speed = speed >= 2f ? 1f : 2f;
+                    PlayerPrefs.SetFloat(SpeedPrefKey, speed);
+                    UpdateSpeedLabel();
+                });
+            UpdateSpeedLabel();
             restartButton.onClick.AddListener(() => onRestart?.Invoke());
         }
 
@@ -113,6 +153,7 @@ namespace Grimward.Presentation.Battle
             StopAllCoroutines();
             battle = battleState; db = database; onRestart = restart; sprites = spriteCatalog;
             shownHero = null; inspected = null; hoveredButton = -1; selectedSkill = -1; selectedItem = null; enemyRunning = false;
+            playing = false; textStack.Clear(); autoTimer = 0f;
             resultPanel.SetActive(false);
             infoText.text = "";
             Refresh();
@@ -120,7 +161,7 @@ namespace Grimward.Presentation.Battle
 
         // ── 입력 ─────────────────────────────
 
-        private bool CanInput => battle != null && battle.Phase == BattlePhase.PlayerTurn && !enemyRunning;
+        private bool CanInput => battle != null && battle.Phase == BattlePhase.PlayerTurn && !enemyRunning && !playing;
 
         private void OnSkill(int index)
         {
@@ -130,14 +171,17 @@ namespace Grimward.Presentation.Battle
             if (!battle.CanUseSkill(skill, out string reason)) { infoText.text = $"{skill.name}: {reason}"; return; }
 
             selectedItem = null;
-            if (skill.target == DataKeys.Target.Self || skill.target == DataKeys.Target.AllySlot ||
-                skill.target == DataKeys.Target.AllAllies)
+            if (skill.target == DataKeys.Target.AllySlot) // 소환(빈 칸)은 고를 대상이 없다
             {
                 Execute(() => battle.UseSkill(skill, battle.TargetsFor(skill).First()));
                 return;
             }
+            // 자신·아군 전체 기술도 아군 칸을 눌러야 발동 (실수 방지)
             selectedSkill = index;
-            infoText.text = $"{skill.name} — 대상을 고르세요 (같은 기술을 다시 누르면 취소)";
+            string how = skill.target == DataKeys.Target.Self ? "자신을 눌러 사용"
+                : skill.target == DataKeys.Target.AllAllies ? "아군 아무나 눌러 아군 전체에 사용"
+                : "대상을 고르세요";
+            infoText.text = $"{skill.name} — {how} (같은 기술·단축키를 다시 누르면 취소)";
             Refresh();
         }
 
@@ -198,17 +242,80 @@ namespace Grimward.Presentation.Battle
 
         private void Execute(Action action)
         {
-            try { action(); infoText.text = ""; }
-            catch (InvalidOperationException e) { infoText.text = e.Message; }
+            int from = battle.Log.Count;
             selectedSkill = -1; selectedItem = null;
-            Refresh();
+            try { action(); infoText.text = ""; }
+            catch (InvalidOperationException e) { infoText.text = e.Message; Refresh(); return; }
+            StartCoroutine(Playback(from));
         }
 
         // ── 적 차례 ─────────────────────────────
 
+        private static readonly Key[] SkillKeys = { Key.Digit1, Key.Digit2, Key.Digit3, Key.Digit4, Key.Digit5 };
+        private static readonly Key[] NumpadKeys = { Key.Numpad1, Key.Numpad2, Key.Numpad3, Key.Numpad4, Key.Numpad5 };
+
+        /// <summary>단축키 1~4 = 기술 칸, 5 = 이동. 같은 키를 다시 누르면 선택 취소.</summary>
+        private void HandleHotkeys()
+        {
+            var kb = Keyboard.current;
+            if (kb == null || !CanInput) return;
+            for (int i = 0; i < SkillKeys.Length; i++)
+            {
+                if (!kb[SkillKeys[i]].wasPressedThisFrame && !kb[NumpadKeys[i]].wasPressedThisFrame) continue;
+                if (shownHero != battle.CurrentActor) { shownHero = battle.CurrentActor; Refresh(); }
+                heroPanel.PressButton(i);
+                return;
+            }
+        }
+
+        // ── 자동 진행 ─────────────────────────────
+
+        private bool autoPlay;
+        private AutoPartyAI.Focus autoFocus;
+        private float autoTimer;
+
+        public bool AutoPlay => autoPlay;
+
+        /// <summary>자동 진행: 파티도 AI가 조작하고, 전투가 끝나면 다음 전투(onRestart)로 넘어간다.</summary>
+        public void SetAutoPlay(bool on, AutoPartyAI.Focus focus)
+        {
+            autoPlay = on; autoFocus = focus; autoTimer = 0f;
+            if (battle != null) { ClearSelection(); Refresh(false); }
+        }
+
+        private void TickAuto()
+        {
+            if (battle == null || playing || enemyRunning) return;
+            if (battle.Phase == BattlePhase.PlayerTurn)
+            {
+                autoTimer += Time.deltaTime;
+                if (autoTimer < autoActionDelay / speed) return;
+                autoTimer = 0f;
+                shownHero = battle.CurrentActor;
+                if (battle.Round > 60) { Execute(battle.Flee); return; } // 교착 상태 방지
+                var action = AutoPartyAI.Decide(battle, autoFocus);
+                Execute(() =>
+                {
+                    try { AutoPartyAI.Apply(battle, action); }
+                    catch (InvalidOperationException) { battle.Pass(); } // 판단이 어긋나면 넘기기 (멈춤 방지)
+                });
+            }
+            else if (battle.Phase == BattlePhase.Ended && resultPanel.activeSelf)
+            {
+                autoTimer += Time.deltaTime;
+                if (autoTimer < autoRestartDelay / speed) return;
+                autoTimer = 0f;
+                onRestart?.Invoke();
+            }
+        }
+
         private void Update()
         {
-            if (battle != null && battle.Phase == BattlePhase.EnemyTurn && !enemyRunning)
+            var kb = Keyboard.current;
+            if (kb != null && kb[Key.A].wasPressedThisFrame) SetAutoPlay(!autoPlay, autoFocus);
+            if (autoPlay) TickAuto();
+            else HandleHotkeys();
+            if (battle != null && battle.Phase == BattlePhase.EnemyTurn && !enemyRunning && !playing)
                 StartCoroutine(RunEnemy());
         }
 
@@ -216,15 +323,184 @@ namespace Grimward.Presentation.Battle
         {
             enemyRunning = true;
             Refresh();
-            yield return new WaitForSeconds(enemyTurnDelay);
+            yield return new WaitForSeconds(enemyTurnDelay / speed);
+            int from = battle.Log.Count;
             battle.RunEnemyTurn();
+            yield return Playback(from);
             enemyRunning = false;
             Refresh();
         }
 
+        // ── 연출: 행동 하나가 남긴 기록을 순서대로 보여 준다 ─────────────────────────────
+
+        private IEnumerator Playback(int from)
+        {
+            playing = true;
+            Refresh(bindSlots: false);   // 칸은 행동 전 모습 그대로 두고 기록을 따라 바꾼다
+            for (int i = from; i < battle.Log.Count; i++)
+            {
+                var e = battle.Log[i];
+                float wait = PlayEvent(e);
+                if (wait > 0f) yield return new WaitForSeconds(wait / speed);
+            }
+            playing = false;
+            Refresh();
+        }
+
+        /// <summary>기록 한 줄의 연출을 시작하고, 다음 기록까지 기다릴 시간(속도 ×1 기준)을 돌려준다.</summary>
+        private float PlayEvent(BattleEvent e)
+        {
+            float t = stepTime / speed;
+            var target = FindSlot(e.Target);
+            switch (e.Kind)
+            {
+                case BattleEventKind.SkillUsed:
+                {
+                    var actor = FindSlot(e.Actor);
+                    if (actor == null) return 0f;
+                    actor.PlayLunge(Dir(e.Actor), t * 0.8f);
+                    return stepTime * 0.6f;
+                }
+                case BattleEventKind.Damaged:
+                    if (target == null) return 0f;
+                    target.UpdateHp(e.Target);
+                    target.PlayHit(t);
+                    Float(target, e.Critical ? $"치명타! {e.Amount}" : $"{e.Amount}", e.Critical ? critColor : damageColor,
+                        e.Critical ? 1.35f : 1.15f);
+                    return stepTime;
+                case BattleEventKind.Missed:
+                    if (target == null) return 0f;
+                    target.PlayDodge(Dir(e.Target), t);
+                    Float(target, "회피", missColor);
+                    return stepTime;
+                case BattleEventKind.Healed:
+                    if (target == null) return 0f;
+                    target.UpdateHp(e.Target);
+                    Float(target, $"+{e.Amount}", healColor, 1.1f);
+                    return stepTime * 0.7f;
+                case BattleEventKind.PoisonTicked:
+                case BattleEventKind.BleedTicked:
+                case BattleEventKind.BurnTicked:
+                    if (target == null) return 0f;
+                    target.UpdateHp(e.Target);
+                    target.PlayHit(t * 0.7f);
+                    Float(target, (e.Kind == BattleEventKind.PoisonTicked ? "중독 " : e.Kind == BattleEventKind.BurnTicked ? "화상 " : "출혈 ") + e.Amount,
+                        e.Kind == BattleEventKind.PoisonTicked ? healColor : e.Kind == BattleEventKind.BurnTicked ? critColor : injuryColor, 0.95f);
+                    return stepTime * 0.8f;
+                case BattleEventKind.StatusResisted:
+                    if (target != null) Float(target, e.Message.EndsWith("면역") ? "면역" : "저항", missColor, 0.9f);
+                    return stepTime * 0.5f;
+                case BattleEventKind.Stunned:
+                    if (target != null) Float(target, "기절", critColor, 1.05f);
+                    return stepTime;
+                case BattleEventKind.EffectApplied:
+                {
+                    if (target == null) return 0f;
+                    string label = EffectLabel(e.Message);
+                    Float(target, label, IsDebuff(label) ? debuffColor : buffColor, 0.85f);
+                    return stepTime * 0.35f;
+                }
+                case BattleEventKind.Injured:
+                    if (target == null) return 0f;
+                    Float(target, (e.Message.Contains("악화") ? "악화! " : "부상! ") + Between(e.Message, '「', '」'), injuryColor, 1.05f);
+                    return stepTime;
+                case BattleEventKind.InjuryTreated:
+                    if (target != null) Float(target, "치료", healColor, 0.9f);
+                    return stepTime * 0.5f;
+                case BattleEventKind.PoisonCured:
+                    if (target != null) Float(target, "해독", healColor, 0.9f);
+                    return stepTime * 0.5f;
+                case BattleEventKind.BleedStopped:
+                    if (target != null) Float(target, "지혈", healColor, 0.9f);
+                    return stepTime * 0.5f;
+                case BattleEventKind.DisplaceResisted:
+                    if (target != null) Float(target, "저항", missColor, 0.95f);
+                    return stepTime * 0.6f;
+                case BattleEventKind.Died:
+                    if (target == null) return 0f;
+                    target.PlayDeath(t * 1.2f);
+                    return stepTime * 1.2f;
+                case BattleEventKind.Stole:
+                    if (target != null) Float(target, "약탈! " + Between(e.Message, '「', '」'), injuryColor, 1.1f);
+                    bag.Bind(battle.Inventory, db, false, null);
+                    return stepTime;
+                case BattleEventKind.EscapeDelayed:
+                    if (target != null) Float(target, "도주 지연", buffColor, 0.95f);
+                    return stepTime * 0.6f;
+                case BattleEventKind.Escaped:
+                    if (target == null) return 0f;
+                    Float(target, "도주!", injuryColor, 1.1f);
+                    target.PlayDeath(t * 1.2f);
+                    return stepTime * 1.2f;
+                case BattleEventKind.ItemRecovered:
+                    if (target != null) Float(target, "되찾음! " + Between(e.Message, '「', '」'), healColor, 1.05f);
+                    bag.Bind(battle.Inventory, db, false, null);
+                    return stepTime;
+                case BattleEventKind.Displaced:
+                case BattleEventKind.Moved:
+                case BattleEventKind.Summoned:
+                    // 자리가 바뀌었으니 칸을 지금 진형으로 다시 그린다
+                    BindSlots(BattleSide.Party, partySlots, new List<Combatant>());
+                    BindSlots(BattleSide.Enemy, enemySlots, new List<Combatant>());
+                    return stepTime * 0.8f;
+                default:
+                    return 0f;
+            }
+        }
+
+        private void Float(CombatantSlotView slot, string text, Color color, float scale = 1f)
+        {
+            if (floatingText == null || slot == null) return;
+            // 같은 칸에 연달아 뜨면 위로 쌓는다
+            int stack = 0;
+            if (textStack.TryGetValue(slot, out var prev) && Time.time - prev.time < 0.8f / speed) stack = prev.count + 1;
+            textStack[slot] = (stack, Time.time);
+            floatingText.Show(text, color, slot.BodyRect, scale, stack % 4, speed);
+        }
+
+        private CombatantSlotView FindSlot(Combatant c)
+        {
+            if (c == null) return null;
+            foreach (var slot in partySlots.Concat(enemySlots))
+                if (slot.gameObject.activeSelf && slot.Bound == c) return slot;
+            return null;
+        }
+
+        private static float Dir(Combatant c) => c.Side == BattleSide.Party ? 1f : -1f;
+
+        /// <summary>"  이름: 피해 +20% (2라운드)" → "피해 +20%"</summary>
+        private static string EffectLabel(string message)
+        {
+            int colon = message.IndexOf(": ", StringComparison.Ordinal);
+            string label = colon >= 0 ? message.Substring(colon + 2) : message.Trim();
+            int paren = label.LastIndexOf(" (", StringComparison.Ordinal);
+            return paren > 0 ? label.Substring(0, paren) : label;
+        }
+
+        /// <summary>수치가 음수면 디버프. 단 「받는 피해 −」는 이로운 효과.</summary>
+        private static bool IsDebuff(string label)
+        {
+            if (label.StartsWith("기절") || label.StartsWith("화상") || label.StartsWith("출혈") || label.StartsWith("중독")) return true;
+            bool negative = label.Contains("-") || label.Contains("−");
+            return label.StartsWith("받는 피해") ? !negative : negative;
+        }
+
+        private static string Between(string s, char open, char close)
+        {
+            int a = s.IndexOf(open), b = s.LastIndexOf(close);
+            return a >= 0 && b > a ? s.Substring(a + 1, b - a - 1) : "";
+        }
+
+        private void UpdateSpeedLabel()
+        {
+            if (speedLabel != null) speedLabel.text = speed >= 2f ? "속도 ×2" : "속도 ×1";
+        }
+
         // ── 표시 ─────────────────────────────
 
-        private void Refresh()
+        private void Refresh() => Refresh(true);
+
+        private void Refresh(bool bindSlots)
         {
             if (battle == null) return;
             var actor = battle.CurrentActor;
@@ -234,13 +510,16 @@ namespace Grimward.Presentation.Battle
             if (inspected != null && !inspected.IsAlive) inspected = null;
 
             roundText.text = $"{battle.Round}";
-            turnText.text = battle.Phase == BattlePhase.Ended ? "전투 종료"
-                : actor == null ? "" : $"{(battle.IsNight ? "밤 · " : "")}{actor.Name}의 차례";
+            turnText.text = (autoPlay ? "<color=#eb4>[자동]</color> " : "") + (battle.Phase == BattlePhase.Ended ? "전투 종료"
+                : actor == null ? "" : $"{(battle.IsNight ? "밤 · " : "")}{actor.Name}의 차례");
             fleeButton.interactable = CanInput;
 
-            var targets = CurrentTargets();
-            BindSlots(BattleSide.Party, partySlots, targets);
-            BindSlots(BattleSide.Enemy, enemySlots, targets);
+            if (bindSlots)
+            {
+                var targets = CurrentTargets();
+                BindSlots(BattleSide.Party, partySlots, targets);
+                BindSlots(BattleSide.Enemy, enemySlots, targets);
+            }
 
             heroPanel.Bind(shownHero, db, battle, CanInput && shownHero == actor, selectedSkill);
 
@@ -251,12 +530,15 @@ namespace Grimward.Presentation.Battle
             bag.Bind(battle.Inventory, db, CanInput && battle.CanUseItem, selectedItem);
             logText.text = string.Join("\n", battle.Log.Skip(Math.Max(0, battle.Log.Count - logLines)).Select(e => e.Message));
 
-            if (battle.Phase == BattlePhase.Ended && !resultPanel.activeSelf)
+            if (battle.Phase == BattlePhase.Ended && !playing && !resultPanel.activeSelf)
             {
                 resultPanel.SetActive(true);
                 string outcome = battle.Outcome == BattleOutcome.Victory ? "승리"
                     : battle.Outcome == BattleOutcome.Defeat ? "전멸" : "도주";
-                resultText.text = $"<size=150%>{outcome}</size>\n{battle.Round}라운드 · 처치 {battle.KilledMonsterIds.Count}";
+                string fallen = string.Join("\n", battle.Log.Where(l => l.Kind == BattleEventKind.KnockedDown || l.Kind == BattleEventKind.Escaped)
+                    .Select(l => $"<size=80%><color=#e77>{l.Message}</color></size>"));
+                resultText.text = $"<size=150%>{outcome}</size>\n{battle.Round}라운드 · 처치 {battle.KilledMonsterIds.Count}" +
+                                  (fallen.Length > 0 ? "\n" + fallen : "");
             }
             UpdateTooltip();
         }
@@ -268,7 +550,7 @@ namespace Grimward.Presentation.Battle
             {
                 var skill = inspected.Skills.FirstOrDefault(s => "skill:" + s.id == id);
                 if (skill != null)
-                    hoverText = BattleText.SkillTooltip(skill, inspected.Level, db, inspected.Side == BattleSide.Enemy);
+                    hoverText = BattleText.SkillTooltip(skill, inspected.Level, db, inspected.Side == BattleSide.Enemy, inspected);
             }
             else if (id.StartsWith("passive:"))
             {
@@ -300,7 +582,7 @@ namespace Grimward.Presentation.Battle
             if (index < 0) { tooltip.Hide(); return; }
             string text;
             if (index == MoveIndex) text = BattleText.MoveTooltip();
-            else if (index < shownHero.Skills.Count) text = BattleText.SkillTooltip(shownHero.Skills[index], shownHero.Level, db);
+            else if (index < shownHero.Skills.Count) text = BattleText.SkillTooltip(shownHero.Skills[index], shownHero.Level, db, false, shownHero);
             else { tooltip.Hide(); return; }
             tooltip.Show(text, heroPanel.ButtonRect(index));
         }

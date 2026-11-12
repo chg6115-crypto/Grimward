@@ -108,6 +108,31 @@ namespace Grimward.Domain.Data
         public PassiveDefinition[] passives;
         /// <summary>의뢰 집계용 분류 (예: "goblin").</summary>
         public string family;
+        /// <summary>상태이상 저항 (일반 10% · 정예 20% · 보스 40%).</summary>
+        public ResistDefinition resists;
+        /// <summary>마법 저항: 마법 피해를 방어도 대신 이 비율로 줄인다. 기본 0.</summary>
+        public double magicResist;
+        /// <summary>면역 상태이상 (DataKeys.Resist 값).</summary>
+        public string[] immunities;
+    }
+
+    [Serializable]
+    public sealed class StatWeightDefinition
+    {
+        public int strength;
+        public int dexterity;
+        public int intelligence;
+        public int Sum => strength + dexterity + intelligence;
+    }
+
+    [Serializable]
+    public sealed class ResistDefinition
+    {
+        public double stun;
+        public double poison;
+        public double bleed;
+        public double burn;
+        public double debuff;
     }
 
     /// <summary>
@@ -148,8 +173,10 @@ namespace Grimward.Domain.Data
         public string target;
         /// <summary>이 타입의 적을 상대할 때 효과 2배 (예: 축복 vs unholy).</summary>
         public string doubledVsType;
-        /// <summary>poison: 차례 시작 시 피해.</summary>
+        /// <summary>poison·bleed·burn: 차례 시작 시 피해.</summary>
         public int damagePerTurn;
+        /// <summary>적에게 거는 효과의 기본 확률. 실제 = chance − 대상 저항. 0이면 100%.</summary>
+        public double chance;
     }
 
     [Serializable]
@@ -216,6 +243,15 @@ namespace Grimward.Domain.Data
         public bool multi;
         public bool damaging;
         public bool ignoreArmor;
+        /// <summary>명중 시 가방에서 아이템 1개를 훔친다 (소매치기 낚아채기). 한 마리당 1회.</summary>
+        public bool steal;
+        /// <summary>"physical"(비어 있으면) | "magical" — 마법 피해는 마법 저항으로 줄어든다.</summary>
+        public string damageType;
+        /// <summary>능력치 가중치(합 3). 피해·회복 보너스 = 내림((근력×a + 민첩×b + 지능×c) ÷ statWeightDivisor).</summary>
+        public StatWeightDefinition weights;
+        /// <summary>피해 편차 (정밀 0.1 · 보통 0.25 · 거침 0.5). 0이면 공격력 범위를 그대로 굴린다(몬스터 기본).
+        /// 범위 = 중앙값 × (1 ± 편차), 중앙값 = 무기 평균 + 능력치 보너스. 지각 안정성이 하한을 끌어올린다.</summary>
+        public double variance;
         /// <summary>레벨 1~5. 비어 있으면 0 보정.</summary>
         public SkillLevel[] levels;
         public FixedDamageDefinition fixedDamage;
@@ -250,8 +286,10 @@ namespace Grimward.Domain.Data
         public string id;
         public string name;
         public EncounterSlotDefinition[] slots;
-        /// <summary>비어 있지 않으면 이 중 하나의 편성 ID를 무작위로 골라 그것을 쓴다 (예: 얕은 숲 보스 2종).</summary>
+        /// <summary>비어 있지 않으면 이 중 하나의 편성 ID를 무작위로 골라 그것을 쓴다 (예: 얕은 숲 보스 2종, 일반 방 로스터).</summary>
         public string[] variants;
+        /// <summary>variants 가중치 (같은 길이). 비어 있으면 균등.</summary>
+        public int[] variantWeights;
     }
 
     [Serializable]

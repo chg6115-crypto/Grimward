@@ -25,6 +25,11 @@ namespace Grimward.Domain.Data
         public int speedStatDivisor;
         public double critBase;
         public double critPerDexterity;
+        /// <summary>기술 능력치 보너스 = 내림(가중 합 ÷ 이 값).</summary>
+        public int statWeightDivisor;
+        /// <summary>안정성 = 지각 × 계수 (상한 stabilityMax). 피해 하한을 편차 × 안정성만큼 끌어올린다.</summary>
+        public double stabilityPerPerception;
+        public double stabilityMax;
 
         // 전투 공식
         public double baseHitChance;
@@ -41,6 +46,13 @@ namespace Grimward.Domain.Data
         public double injuryHpThreshold;
         /// <summary>임계 도달 시 부상이 없으면 공격 기술의 태그 부상을 이 확률로 경상.</summary>
         public double injuryThresholdChance;
+        /// <summary>모험가 기절·중독·출혈·화상 저항 = 기본 + 체력 × 계수.</summary>
+        public double heroResistBase;
+        public double heroResistPerVitality;
+        /// <summary>모험가 약화 저항 = 기본 + 지능 × 계수.</summary>
+        public double heroDebuffResistPerIntelligence;
+        /// <summary>기절이 풀린 뒤 기절 저항 가산 (다음 자기 차례 끝까지).</summary>
+        public double stunRecoveryResist;
         public double nightPartyAccuracyPenalty;
         public double nightEnemyAccuracyBonus;
         public int speedRollDie;

@@ -4,7 +4,7 @@ using Grimward.Domain.Data;
 
 namespace Grimward.Domain.Units
 {
-    /// <summary>로스터의 모험가. 영구 사망.</summary>
+    /// <summary>로스터의 모험가. 영구 사망. 전투불능은 한 출정에 한 번까지 (두 번째면 사망).</summary>
     public sealed class Adventurer
     {
         public string Id { get; }
@@ -19,6 +19,8 @@ namespace Grimward.Domain.Units
         public int Charisma { get; set; }
         public int CurrentHp { get; set; }
         public bool IsDead { get; set; }
+        /// <summary>이번 출정에서 전투불능이 된 횟수. 출정을 시작할 때 0으로.</summary>
+        public int KnockdownsThisExpedition { get; set; }
         public List<string> EquippedSkills { get; }
         /// <summary>부상. 출정이 끝나도 남고, 교회 치료소나 (뇌진탕은) 휴식으로 낫는다.</summary>
         public List<InjuryState> Injuries { get; } = new List<InjuryState>();
@@ -37,6 +39,9 @@ namespace Grimward.Domain.Units
             Charisma = charisma;
             EquippedSkills = new List<string>(classDef.skills);
         }
+
+        /// <summary>출정 시작: 전투불능 횟수 초기화.</summary>
+        public void BeginExpedition() => KnockdownsThisExpedition = 0;
 
         public void RestoreFullHp(BalanceConfig config) => CurrentHp = StatFormulas.MaxHp(config, this);
 

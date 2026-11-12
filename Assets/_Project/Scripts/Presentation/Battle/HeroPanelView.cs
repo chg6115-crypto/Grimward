@@ -4,6 +4,7 @@ using Grimward.Domain.Data;
 using Grimward.Presentation.Common;
 using TMPro;
 using UnityEngine;
+using UnityEngine.EventSystems;
 using UnityEngine.UI;
 
 namespace Grimward.Presentation.Battle
@@ -57,6 +58,14 @@ namespace Grimward.Presentation.Battle
                 relay.Entered += () => OnHover?.Invoke(index, (RectTransform)button.transform);
                 relay.Exited += () => OnHoverEnd?.Invoke();
             }
+        }
+
+        /// <summary>단축키: 0~3 기술, 4 이동. 버튼이 눌리는 연출과 함께 클릭과 같은 처리를 한다.</summary>
+        public void PressButton(int index)
+        {
+            var button = index < skillButtons.Length ? skillButtons[index] : index == skillButtons.Length ? moveButton : null;
+            if (button == null || !button.gameObject.activeInHierarchy || !button.IsInteractable()) return;
+            button.OnSubmit(new BaseEventData(EventSystem.current));
         }
 
         public RectTransform ButtonRect(int index) =>
