@@ -72,6 +72,15 @@ namespace Grimward.Domain.Data
             public const string MagicResist = "magicResist";
         }
 
+        public static class NodeEvent
+        {
+            public const string Battle = "battle";
+            public const string Boss = "boss";
+            public const string Gather = "gather";
+            public const string Investigate = "investigate";
+            public const string Treasure = "treasure";
+        }
+
         public static class Passive
         {
             public const string AllyAura = "allyAura";

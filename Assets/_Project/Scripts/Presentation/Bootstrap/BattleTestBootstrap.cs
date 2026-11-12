@@ -25,15 +25,16 @@ namespace Grimward.Presentation.Bootstrap
 
         public enum EncounterPreset
         {
-            [InspectorName("튜토리얼 고블린 1~2")] TutorialBattle,
-            [InspectorName("약초밭 고블린 3")] TutorialHerb,
+            [InspectorName("튜토리얼 2번: 고블린 1")] TutorialBattle,
+            [InspectorName("튜토리얼 4번 약초밭: 고블린 2 + 투석병")] TutorialHerb,
             [InspectorName("얕은 숲 일반")] ForestNormal,
             [InspectorName("보스방 (무작위)")] ForestBoss,
             [InspectorName("악마 습격")] DemonRaid,
             [InspectorName("보스방: 홉고블린")] BossHobgoblin,
             [InspectorName("보스방: 버그베어")] BossBugbear,
             [InspectorName("얕은 숲: 소매치기 방 (로스터 C)")] ThiefRoom,
-            [InspectorName("얕은 숲: 소매치기 무리 (로스터 D)")] ThiefGang
+            [InspectorName("얕은 숲: 소매치기 무리 (로스터 D)")] ThiefGang,
+            [InspectorName("튜토리얼 3번: 고블린 2")] TutorialGuard
         }
 
         [SerializeField] private BattleScreen screen;
@@ -87,6 +88,7 @@ namespace Grimward.Presentation.Bootstrap
             [EncounterPreset.BossBugbear] = "forest_boss_bugbear",
             [EncounterPreset.ThiefRoom] = "forest_roster_c",
             [EncounterPreset.ThiefGang] = "forest_roster_d",
+            [EncounterPreset.TutorialGuard] = "tutorial_herb_guard",
         };
 
         /// <summary>에디터 UI 빌더 전용.</summary>

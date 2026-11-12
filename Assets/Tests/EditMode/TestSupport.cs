@@ -43,7 +43,7 @@ namespace Grimward.Tests
             damageReductionCap = 0.8, minHitDamage = 1, injuryMaxPerAdventurer = 2, injuryHpThreshold = 0.3, injuryThresholdChance = 0.5, nightPartyAccuracyPenalty = 0.1, nightEnemyAccuracyBonus = 0.1, speedRollDie = 8,
             ranksPerSide = 4, itemsPerTurn = 1, fleeHpDamageRatio = 0.2, aiBuffChance = 0.3, aiHealThreshold = 0.5,
             defaultPerception = 3, bagSlots = 12,
-            heroResistBase = 0, heroResistPerVitality = 0, heroDebuffResistPerIntelligence = 0, stunRecoveryResist = 0.3, statWeightDivisor = 6, stabilityPerPerception = 0.04, stabilityMax = 0.4,
+            heroResistBase = 0, heroResistPerVitality = 0, heroDebuffResistPerIntelligence = 0, stunRecoveryResist = 0.3, mapVisionRange = 1, perceptionDetectBase = 0.1, perceptionDetectPerPoint = 0.05, perceptionDetectMin = 0.05, perceptionDetectMax = 0.9, travelFirstMinutes = 60, travelRepeatMinutes = 30, battleMinutes = 30, bossBattleMinutes = 60, fleeMinutes = 60, statWeightDivisor = 6, stabilityPerPerception = 0.04, stabilityMax = 0.4,
             monsterHpVariance = 0.15, monsterAccuracyDodgeVariance = 2, monsterSpeedVariance = 1
         };
 
@@ -282,6 +282,17 @@ namespace Grimward.Tests
                         major = new InjuryStageDefinition { name = "뇌진탕 (중상)", effects = new[] { Stat("accuracy", -10, 0) } }
                     }
                 },
+                maps = new[] { TestMap() },
+                investigations = new[]
+                {
+                    new InvestigationDefinition
+                    {
+                        id = "box", name = "상자", supplyItem = "key",
+                        good = new InvestigationResultDefinition { chance = 0.6, text = "가득", rewards = new[] { new ItemAmountDefinition { item = "potion", amount = 2 } } },
+                        normal = new InvestigationResultDefinition { chance = 0.3, text = "조금", rewards = new[] { new ItemAmountDefinition { item = "potion", amount = 1 } } },
+                        bad = new InvestigationResultDefinition { chance = 0.1, text = "빈 상자" }
+                    }
+                },
                 monsterTypes = new[]
                 {
                     new NameDefinition { id = "normal", name = "일반" },
@@ -289,6 +300,33 @@ namespace Grimward.Tests
                 }
             };
         }
+
+        /// <summary>
+        /// 테스트 맵:  n1(시작) ─ n2(전투) ─ n3(약초 2, 막다른 곳)
+        ///               \        /
+        ///                n4(빈 노드)
+        /// </summary>
+        public static MapDefinition TestMap() => new MapDefinition
+        {
+            id = "test_map", name = "테스트 맵", radius = 2, startNode = "n1",
+            nodes = new[]
+            {
+                new MapNodeDefinition { id = "n1", name = "입구", q = 0, r = 0 },
+                new MapNodeDefinition { id = "n2", name = "전투", q = 1, r = 0,
+                    events = new[] { new NodeEventDefinition { kind = "battle", encounter = "two" } } },
+                new MapNodeDefinition { id = "n3", name = "약초밭", q = 2, r = 0,
+                    events = new[] { new NodeEventDefinition { kind = "gather", item = "herb", amount = 2 } } },
+                new MapNodeDefinition { id = "n4", name = "빈 터", q = 0, r = 1 },
+                new MapNodeDefinition { id = "n5", name = "상자", q = 1, r = 1,
+                    events = new[] { new NodeEventDefinition { kind = "investigate", objectId = "box" } } }
+            },
+            edges = new[]
+            {
+                new MapEdgeDefinition { a = "n1", b = "n2" }, new MapEdgeDefinition { a = "n2", b = "n3" },
+                new MapEdgeDefinition { a = "n1", b = "n4" }, new MapEdgeDefinition { a = "n4", b = "n2" },
+                new MapEdgeDefinition { a = "n2", b = "n5" }
+            }
+        };
 
         public static GameDatabase Db() => new GameDatabase(File());
 

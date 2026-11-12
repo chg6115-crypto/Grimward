@@ -16,6 +16,92 @@ namespace Grimward.Domain.Data
         public ItemDefinition[] items;
         public NameDefinition[] monsterTypes;
         public InjuryDefinition[] injuries;
+        public MapDefinition[] maps;
+        public InvestigationDefinition[] investigations;
+    }
+
+    /// <summary>조사 물건 (엑셀 23_조사물건). 결과 셋 중 하나: 보급품(supplyItem)을 쓰면 좋음 확정.</summary>
+    [Serializable]
+    public sealed class InvestigationDefinition
+    {
+        public string id;
+        public string name;
+        public string situation;
+        public InvestigationResultDefinition good;
+        public InvestigationResultDefinition normal;
+        public InvestigationResultDefinition bad;
+        /// <summary>이 보급품을 쓰면 좋음 확정 (예: 수상한 상자 — 열쇠). 비어 있으면 없음.</summary>
+        public string supplyItem;
+    }
+
+    [Serializable]
+    public sealed class InvestigationResultDefinition
+    {
+        public double chance;
+        public string text;
+        public ItemAmountDefinition[] rewards;
+    }
+
+    [Serializable]
+    public sealed class ItemAmountDefinition
+    {
+        public string item;
+        public int amount;
+    }
+
+    /// <summary>
+    /// 탐험 맵 하나 (기획안 5장). 육각 좌표 노드 + 길. 길로 연결된 노드로만 이동한다.
+    /// 튜토리얼처럼 고정 맵은 이벤트까지 여기에 정의하고, 얕은 숲은 구조만 정의한 뒤 이벤트를 배치한다(M2-4).
+    /// </summary>
+    [Serializable]
+    public sealed class MapDefinition
+    {
+        public string id;
+        public string name;
+        /// <summary>탐험 구역 이름 (지도 창 제목: 얕은 숲 등). 비면 name을 쓴다.</summary>
+        public string region;
+        /// <summary>육각 격자 반경 (1depth 2 · 2depth 3).</summary>
+        public int radius;
+        public string startNode;
+        public MapNodeDefinition[] nodes;
+        public MapEdgeDefinition[] edges;
+        /// <summary>이 맵의 기본 규칙 메모 (튜토리얼: 진형 붕괴 없음 등). 표시용.</summary>
+        public string notes;
+    }
+
+    [Serializable]
+    public sealed class MapNodeDefinition
+    {
+        public string id;
+        public string name;
+        public int q;
+        public int r;
+        /// <summary>노드 이벤트 (한 노드에 최대 2개 겹침: 전투+보물, 전투+채집 등). 비어 있으면 빈 노드.</summary>
+        public NodeEventDefinition[] events;
+    }
+
+    /// <summary>
+    /// 노드 이벤트. kind:
+    /// battle — encounter 편성 전투 / gather — item을 amount개 얻음 / investigate — 조사 물건(objectId) /
+    /// treasure — 보물 / boss — 보스 전투(encounter).
+    /// </summary>
+    [Serializable]
+    public sealed class NodeEventDefinition
+    {
+        public string kind;
+        public string encounter;
+        public string item;
+        public int amount;
+        public string objectId;
+        /// <summary>조사 결과 고정 ("good" 등, 튜토리얼). 비어 있으면 굴림.</summary>
+        public string fixedResult;
+    }
+
+    [Serializable]
+    public sealed class MapEdgeDefinition
+    {
+        public string a;
+        public string b;
     }
 
     /// <summary>부상 한 단계(경상/중상)의 효과.</summary>

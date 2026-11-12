@@ -44,6 +44,8 @@ namespace Grimward.Presentation.Battle
         [SerializeField] private GameObject resultPanel;
         [SerializeField] private TMP_Text resultText;
         [SerializeField] private Button restartButton;
+        [Tooltip("24시간 시계 (Panel_Top 왼쪽). 비어 있으면 표시하지 않는다")]
+        [SerializeField] private ClockView clock;
 
         [Header("연출")]
         [SerializeField] private float enemyTurnDelay = 0.6f;
@@ -148,8 +150,23 @@ namespace Grimward.Presentation.Battle
             restartButton.onClick.AddListener(() => onRestart?.Invoke());
         }
 
-        public void Show(BattleState battleState, GameDatabase database, Action restart, Data.SpriteCatalog spriteCatalog = null)
+        public void AssignClock(ClockView clockView) => clock = clockView;
+
+        /// <param name="time">출정 중이면 지금 시각 (시계 표시). 없으면 시계를 숨긴다.</param>
+        /// <param name="continueLabel">결과창 버튼 글자 (예: 「지도로」). 없으면 그대로.</param>
+        public void Show(BattleState battleState, GameDatabase database, Action restart, Data.SpriteCatalog spriteCatalog = null,
+            Domain.Core.GameTime time = null, string continueLabel = null)
         {
+            if (clock != null)
+            {
+                clock.gameObject.SetActive(time != null);
+                if (time != null) clock.Set(time, database.Balance, false);
+            }
+            if (continueLabel != null)
+            {
+                var label = restartButton.GetComponentInChildren<TMP_Text>(true);
+                if (label != null) label.text = continueLabel;
+            }
             StopAllCoroutines();
             battle = battleState; db = database; onRestart = restart; sprites = spriteCatalog;
             shownHero = null; inspected = null; hoveredButton = -1; selectedSkill = -1; selectedItem = null; enemyRunning = false;

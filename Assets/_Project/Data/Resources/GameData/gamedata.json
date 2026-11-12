@@ -122,7 +122,17 @@
   "monsterSpeedVariance": 1,
   "statWeightDivisor": 6,
   "stabilityPerPerception": 0.04,
-  "stabilityMax": 0.4
+  "stabilityMax": 0.4,
+  "travelFirstMinutes": 60,
+  "travelRepeatMinutes": 30,
+  "battleMinutes": 30,
+  "bossBattleMinutes": 60,
+  "fleeMinutes": 60,
+  "mapVisionRange": 1,
+  "perceptionDetectBase": 0.1,
+  "perceptionDetectPerPoint": 0.05,
+  "perceptionDetectMin": 0.05,
+  "perceptionDetectMax": 0.9
  },
  "classes": [
   {
@@ -3394,7 +3404,7 @@
  "encounters": [
   {
    "id": "tutorial_battle",
-   "name": "고블린 (튜토리얼)",
+   "name": "오솔길 고블린 (튜토리얼 2번)",
    "variants": [],
    "slots": [
     {
@@ -3402,19 +3412,13 @@
       "goblin"
      ],
      "chance": 1.0
-    },
-    {
-     "candidates": [
-      "goblin"
-     ],
-     "chance": 0.5
     }
    ],
    "variantWeights": []
   },
   {
    "id": "tutorial_herb",
-   "name": "약초밭 고블린",
+   "name": "약초밭 고블린 (튜토리얼 4번)",
    "slots": [
     {
      "candidates": [
@@ -3430,7 +3434,7 @@
     },
     {
      "candidates": [
-      "goblin"
+      "goblin_slinger"
      ],
      "chance": 1.0
     }
@@ -3686,6 +3690,26 @@
      "chance": 1.0
     }
    ]
+  },
+  {
+   "id": "tutorial_herb_guard",
+   "name": "갈림길 고블린 (튜토리얼 3번)",
+   "variants": [],
+   "variantWeights": [],
+   "slots": [
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 1.0
+    },
+    {
+     "candidates": [
+      "goblin"
+     ],
+     "chance": 1.0
+    }
+   ]
   }
  ],
  "items": [
@@ -3738,6 +3762,296 @@
    "cureBleed": true,
    "stack": 3,
    "price": 15
+  },
+  {
+   "id": "mana_stone_low",
+   "name": "마정석(하)",
+   "heal": 0,
+   "curePoison": false,
+   "treatInjury": false,
+   "cureBleed": false,
+   "stack": 5,
+   "price": 10
+  }
+ ],
+ "maps": [
+  {
+   "id": "tutorial",
+   "name": "튜토리얼: 약초밭 가는 길",
+   "region": "얕은 숲",
+   "radius": 2,
+   "startNode": "n1",
+   "notes": "고정 맵·고정 배치. 진형 붕괴 없음, 조사 결과 좋음 고정, 출발 시 열쇠 1개. 밤 20:00 악마 등장",
+   "nodes": [
+    {
+     "id": "n1",
+     "name": "숲 입구",
+     "q": -2,
+     "r": 0,
+     "events": []
+    },
+    {
+     "id": "n2",
+     "name": "오솔길",
+     "q": -1,
+     "r": 0,
+     "events": [
+      {
+       "kind": "battle",
+       "encounter": "tutorial_battle",
+       "item": "",
+       "amount": 0,
+       "objectId": "",
+       "fixedResult": ""
+      }
+     ]
+    },
+    {
+     "id": "n3",
+     "name": "갈림길",
+     "q": 0,
+     "r": 0,
+     "events": [
+      {
+       "kind": "battle",
+       "encounter": "tutorial_herb_guard",
+       "item": "",
+       "amount": 0,
+       "objectId": "",
+       "fixedResult": ""
+      }
+     ]
+    },
+    {
+     "id": "n4",
+     "name": "약초밭",
+     "q": 1,
+     "r": 0,
+     "events": [
+      {
+       "kind": "battle",
+       "encounter": "tutorial_herb",
+       "item": "",
+       "amount": 0,
+       "objectId": "",
+       "fixedResult": ""
+      },
+      {
+       "kind": "gather",
+       "encounter": "",
+       "item": "herb",
+       "amount": 3,
+       "objectId": "",
+       "fixedResult": ""
+      }
+     ]
+    },
+    {
+     "id": "n5",
+     "name": "뒤집힌 수레",
+     "q": -1,
+     "r": 1,
+     "events": [
+      {
+       "kind": "investigate",
+       "encounter": "",
+       "item": "",
+       "amount": 0,
+       "objectId": "C01",
+       "fixedResult": "good"
+      }
+     ]
+    },
+    {
+     "id": "n6",
+     "name": "수상한 상자",
+     "q": 0,
+     "r": 1,
+     "events": [
+      {
+       "kind": "investigate",
+       "encounter": "",
+       "item": "",
+       "amount": 0,
+       "objectId": "C02",
+       "fixedResult": "good"
+      }
+     ]
+    }
+   ],
+   "edges": [
+    {
+     "a": "n1",
+     "b": "n2"
+    },
+    {
+     "a": "n2",
+     "b": "n3"
+    },
+    {
+     "a": "n3",
+     "b": "n4"
+    },
+    {
+     "a": "n2",
+     "b": "n5"
+    },
+    {
+     "a": "n5",
+     "b": "n6"
+    },
+    {
+     "a": "n6",
+     "b": "n3"
+    }
+   ]
+  }
+ ],
+ "investigations": [
+  {
+   "id": "C01",
+   "name": "뒤집힌 수레",
+   "situation": "상인이 습격당한 흔적",
+   "supplyItem": "",
+   "good": {
+    "chance": 0.6,
+    "text": "짐 속에 전리품이 남아 있다",
+    "rewards": [
+     {
+      "item": "mana_stone_low",
+      "amount": 2
+     },
+     {
+      "item": "potion",
+      "amount": 1
+     }
+    ]
+   },
+   "normal": {
+    "chance": 0.2,
+    "text": "이미 누군가 털어 갔다",
+    "rewards": []
+   },
+   "bad": {
+    "chance": 0.2,
+    "text": "숨어 있던 고블린의 기습!",
+    "rewards": []
+   }
+  },
+  {
+   "id": "C02",
+   "name": "수상한 상자",
+   "situation": "덩굴에 묶인 작은 상자",
+   "supplyItem": "key",
+   "good": {
+    "chance": 0.6,
+    "text": "마정석이 가득하다",
+    "rewards": [
+     {
+      "item": "mana_stone_low",
+      "amount": 3
+     }
+    ]
+   },
+   "normal": {
+    "chance": 0.25,
+    "text": "마정석 하나",
+    "rewards": [
+     {
+      "item": "mana_stone_low",
+      "amount": 1
+     }
+    ]
+   },
+   "bad": {
+    "chance": 0.15,
+    "text": "빈 상자",
+    "rewards": []
+   }
+  },
+  {
+   "id": "C03",
+   "name": "오래된 지도 조각",
+   "situation": "나무에 박힌 양피지",
+   "supplyItem": "",
+   "good": {
+    "chance": 0.6,
+    "text": "주변 지형이 그려져 있다",
+    "rewards": []
+   },
+   "normal": {
+    "chance": 0.2,
+    "text": "가까운 길 하나가 보인다",
+    "rewards": []
+   },
+   "bad": {
+    "chance": 0.2,
+    "text": "가짜 지도",
+    "rewards": []
+   }
+  },
+  {
+   "id": "C04",
+   "name": "버섯 군락",
+   "situation": "어둠 속에서 빛나는 버섯",
+   "supplyItem": "herb",
+   "good": {
+    "chance": 0.4,
+    "text": "먹을 수 있는 버섯이다",
+    "rewards": []
+   },
+   "normal": {
+    "chance": 0.3,
+    "text": "그냥 버섯",
+    "rewards": []
+   },
+   "bad": {
+    "chance": 0.3,
+    "text": "독버섯!",
+    "rewards": []
+   }
+  },
+  {
+   "id": "C05",
+   "name": "샘물",
+   "situation": "맑은 샘",
+   "supplyItem": "",
+   "good": {
+    "chance": 0.5,
+    "text": "맑은 물로 기운을 차렸다",
+    "rewards": []
+   },
+   "normal": {
+    "chance": 0.5,
+    "text": "그냥 물",
+    "rewards": []
+   },
+   "bad": {
+    "chance": 0,
+    "text": "물속의 무언가!",
+    "rewards": []
+   }
+  },
+  {
+   "id": "C06",
+   "name": "사냥꾼의 덫",
+   "situation": "녹슨 덫에 걸린 짐승",
+   "supplyItem": "",
+   "good": {
+    "chance": 0.5,
+    "text": "가죽과 고기를 얻었다",
+    "rewards": []
+   },
+   "normal": {
+    "chance": 0.2,
+    "text": "덫이 부서져 아무것도 없다",
+    "rewards": []
+   },
+   "bad": {
+    "chance": 0.3,
+    "text": "덫에 걸렸다!",
+    "rewards": []
+   }
   }
  ]
 }

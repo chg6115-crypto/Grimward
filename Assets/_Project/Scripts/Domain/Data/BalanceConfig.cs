@@ -65,6 +65,22 @@ namespace Grimward.Domain.Data
         public int monsterAccuracyDodgeVariance;
         public int monsterSpeedVariance;
 
+        // 탐험 시간 (분)
+        /// <summary>처음 지나는 길.</summary>
+        public int travelFirstMinutes;
+        /// <summary>이미 지나온 길.</summary>
+        public int travelRepeatMinutes;
+        public int battleMinutes;
+        public int bossBattleMinutes;
+        public int fleeMinutes;
+        /// <summary>시야: 방문한 노드에서 길 몇 칸까지 노드·길이 보이는가 (기본 1, 특성·조사 물건으로 늘어남).</summary>
+        public int mapVisionRange;
+        /// <summary>지각 탐지: 노드를 처음 발견할 때 이벤트 종류 공개 확률 = 기본 + 지각 × 계수 (최소·최대).</summary>
+        public double perceptionDetectBase;
+        public double perceptionDetectPerPoint;
+        public double perceptionDetectMin;
+        public double perceptionDetectMax;
+
         // 가방
         public int bagSlots;
 

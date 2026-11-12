@@ -14,6 +14,8 @@ namespace Grimward.Domain.Data
         private readonly Dictionary<string, ItemDefinition> items;
         private readonly Dictionary<string, NameDefinition> monsterTypes;
         private readonly Dictionary<string, InjuryDefinition> injuries;
+        private readonly Dictionary<string, MapDefinition> maps;
+        private readonly Dictionary<string, InvestigationDefinition> investigations;
 
         public BalanceConfig Balance { get; }
         public IReadOnlyCollection<ClassDefinition> Classes => classes.Values;
@@ -32,6 +34,8 @@ namespace Grimward.Domain.Data
             items = ToDictionary(file.items, i => i.id, "item");
             monsterTypes = ToDictionary(file.monsterTypes, t => t.id, "monsterType");
             injuries = ToDictionary(file.injuries, i => i.id, "injury");
+            maps = ToDictionary(file.maps, m => m.id, "map");
+            investigations = ToDictionary(file.investigations, i => i.id, "investigation");
         }
 
         public ClassDefinition GetClass(string id) => Get(classes, id, "직업");
@@ -40,6 +44,12 @@ namespace Grimward.Domain.Data
         public EncounterDefinition GetEncounter(string id) => Get(encounters, id, "편성");
         public ItemDefinition GetItem(string id) => Get(items, id, "아이템");
         public InjuryDefinition GetInjury(string id) => Get(injuries, id, "부상");
+        public MapDefinition GetMap(string id) => Get(maps, id, "맵");
+        public InvestigationDefinition GetInvestigation(string id) => Get(investigations, id, "조사 물건");
+        public bool HasInvestigation(string id) => id != null && investigations.ContainsKey(id);
+        public IReadOnlyCollection<MapDefinition> Maps => maps.Values;
+        public bool HasEncounter(string id) => id != null && encounters.ContainsKey(id);
+        public bool HasItem(string id) => id != null && items.ContainsKey(id);
         public IReadOnlyCollection<InjuryDefinition> Injuries => injuries.Values;
 
         /// <summary>부상 단계 표시 이름 (경상/중상 이름).</summary>
@@ -139,6 +149,12 @@ namespace Grimward.Domain.Data
                                 if (!monsters.ContainsKey(id)) errors.Add($"편성 {e.id}: 몬스터 '{id}' 없음");
                     }
             }
+            foreach (var inv in investigations.Values)
+                foreach (var res in new[] { inv.good, inv.normal, inv.bad })
+                    if (res?.rewards != null)
+                        foreach (var rw in res.rewards)
+                            if (!items.ContainsKey(rw.item ?? "")) errors.Add($"조사 물건 {inv.id}: 보상 아이템 '{rw.item}' 없음");
+            foreach (var m in maps.Values) errors.AddRange(Map.MapValidator.Validate(m, this));
             return errors;
         }
 

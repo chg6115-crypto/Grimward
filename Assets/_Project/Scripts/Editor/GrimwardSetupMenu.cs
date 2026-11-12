@@ -25,11 +25,11 @@ namespace Grimward.EditorTools
         private const string FontAssetPath = "Assets/_Project/Art/Fonts/NotoSansKR SDF.asset";
         private static readonly string[] SceneOrder = { "Title", "Town", "Expedition", "BattleTest" };
 
+        // Expedition은 「탐험 화면 만들기」 메뉴가 만든다 (M2). 여기서 다시 만들면 지도가 지워지므로 빼 둔다.
         private static readonly Dictionary<string, string> PlaceholderTitles = new Dictionary<string, string>
         {
             ["Title"] = "GRIMWARD",
             ["Town"] = "마을 (M3에서 구현)",
-            ["Expedition"] = "탐험 (M2에서 구현)",
         };
 
         // ── 메뉴 ─────────────────────────────
