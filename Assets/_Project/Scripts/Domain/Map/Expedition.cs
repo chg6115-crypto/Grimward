@@ -43,6 +43,10 @@ namespace Grimward.Domain.Map
         private BattleState battle;
         private NodeEventDefinition battleEvent;
         private int battleEventIndex;
+        private bool arrivedFirstVisit;   // 이번 도착이 첫 방문 (기습은 첫 방문 전투에만)
+        private long torchUntil;
+        private readonly MapDefinition mapDef;
+        private string randomEncounter;          // 밤 랜덤 전투가 걸려 있으면 편성 id   // Map 생성 중(시작 시야 공개)에도 쓰므로 따로 둔다          // 횃불이 꺼지는 시각 (출정 기준 절대 분)
 
         public ExpeditionMap Map { get; }
         public GameTime Time { get; }
@@ -58,6 +62,15 @@ namespace Grimward.Domain.Map
         public bool IsNight => Time.IsNight(db.Balance);
         public BattleState CurrentBattle => battle;
 
+        // ── 횃불 (11-13) ─────────────────────────────
+
+        private long Now => (long)(Time.Day - 1) * GameTime.MinutesPerDay + Time.MinuteOfDay;
+        /// <summary>횃불 남은 시간(분).</summary>
+        public int TorchMinutesLeft => (int)Math.Max(0, torchUntil - Now);
+        public bool TorchLit => TorchMinutesLeft > 0;
+        /// <summary>밤 패널티 배율: 밤이 아니면 0, 밤이면 1, 밤 + 횃불이면 torchNightPenaltyMultiplier.</summary>
+        public double NightPenaltyScale => !IsNight ? 0 : TorchLit ? db.Balance.torchNightPenaltyMultiplier : 1;
+
         public Expedition(GameDatabase db, IRandomSource random, IReadOnlyList<Adventurer> party, BattleInventory bag,
             MapDefinition map, GameTime start, ITravelTimeCalculator travel = null)
         {
@@ -68,6 +81,7 @@ namespace Grimward.Domain.Map
             Time = start ?? throw new ArgumentNullException(nameof(start));
             foreach (var a in Party) a.BeginExpedition();
             log.Add($"{Time} 출발 — {map.name}");
+            mapDef = map;
             Map = new ExpeditionMap(map, travel ?? new DefaultTravelTimeCalculator(db.Balance),
                 db.Balance.mapVisionRange, DetectEvents);
         }
@@ -92,7 +106,10 @@ namespace Grimward.Domain.Map
         }
 
         /// <summary>전투 밖에서 쓸 수 있는 아이템: 회복(heal) 또는 현장 치료(treatInjury). 해독·지혈은 전투 중 효과라 전투 밖에서는 쓸 데가 없다.</summary>
-        public static bool IsUsableOutsideBattle(ItemDefinition item) => item.heal > 0 || item.treatInjury;
+        public static bool IsUsableOutsideBattle(ItemDefinition item) => item.heal > 0 || item.treatInjury || item.torchMinutes > 0;
+
+        /// <summary>대상 모험가를 고를 필요 없이 바로 쓰는 아이템 (횃불).</summary>
+        public static bool IsInstantOutsideBattle(ItemDefinition item) => item.torchMinutes > 0;
 
         /// <summary>
         /// 전투 밖 아이템 사용 (시간 소모 없음). 회복약 = HP 회복(최대 HP까지), 붕대 = 현장 치료(경상 제거 · 중상 → 경상).
@@ -101,8 +118,9 @@ namespace Grimward.Domain.Map
         public string UseItem(string itemId, Adventurer target)
         {
             if (Phase != ExpeditionPhase.Exploring) throw new InvalidOperationException("지금은 아이템을 쓸 수 없다.");
-            if (target == null || target.IsDead || !party.Contains(target)) throw new InvalidOperationException("아이템 대상이 잘못됐다.");
             var item = db.GetItem(itemId);
+            if (item.torchMinutes > 0) return LightTorch(item);
+            if (target == null || target.IsDead || !party.Contains(target)) throw new InvalidOperationException("아이템 대상이 잘못됐다.");
             if (!IsUsableOutsideBattle(item)) throw new InvalidOperationException($"{item.name}은(는) 전투 밖에서 쓸 데가 없다.");
             if (Bag.Count(itemId) <= 0) throw new InvalidOperationException($"남은 {item.name}: 0개");
 
@@ -126,27 +144,64 @@ namespace Grimward.Domain.Map
             return text;
         }
 
+        /// <summary>횃불: 남은 시간에 torchMinutes를 더한다 (최대 torchMaxMinutes). 꽉 차 있으면 쓰지 않는다.</summary>
+        private string LightTorch(ItemDefinition item)
+        {
+            if (Bag.Count(item.id) <= 0) throw new InvalidOperationException($"남은 {item.name}: 0개");
+            int left = TorchMinutesLeft, max = db.Balance.torchMaxMinutes > 0 ? db.Balance.torchMaxMinutes : item.torchMinutes;
+            int next = Math.Min(max, left + item.torchMinutes);
+            if (next <= left) throw new InvalidOperationException($"{item.name}이(가) 이미 최대({max / 60}시간)로 켜져 있다.");
+            Bag.TryConsume(item.id);
+            torchUntil = Now + next;
+            string text = $"{item.name} 사용 — 남은 시간 {next / 60}시간{(next % 60 > 0 ? $" {next % 60}분" : "")}";
+            log.Add($"{Time} {text}");
+            return text;
+        }
+
         // ── 지각 탐지 ─────────────────────────────
 
-        /// <summary>파티 생존자 중 지각 최고 1명 기준: Clamp(기본 + 지각 × 계수, 최소, 최대).</summary>
+        private int BestPerception => Alive.Select(a => a.Perception).DefaultIfEmpty(0).Max();
+
+        /// <summary>
+        /// 파티 생존자 중 지각 최고 1명 기준: Clamp(기본 + 지각 × 계수 − 밤 감소 + 횃불 가산, 최소, 최대).
+        /// 밤 감소(−20%p)와 횃불 가산(+10%p)은 밤에만.
+        /// </summary>
         public double DetectChance()
         {
             var c = db.Balance;
-            int best = Alive.Select(a => a.Perception).DefaultIfEmpty(0).Max();
-            return Math.Max(c.perceptionDetectMin, Math.Min(c.perceptionDetectMax, c.perceptionDetectBase + best * c.perceptionDetectPerPoint));
+            double chance = c.perceptionDetectBase + BestPerception * c.perceptionDetectPerPoint;
+            if (IsNight) chance += -c.nightDetectPenalty + (TorchLit ? c.torchDetectBonus : 0);
+            return Math.Max(c.perceptionDetectMin, Math.Min(c.perceptionDetectMax, chance));
+        }
+
+        /// <summary>
+        /// 탐지하지 못한 전투에서 기습당할 확률 = Clamp(기본 − 최고 지각 × 계수, 최소, 최대) + 밤 가산(횃불이면 절반).
+        /// </summary>
+        public double AmbushedChance()
+        {
+            var c = db.Balance;
+            double chance = Math.Max(c.ambushedMin, Math.Min(c.ambushedMax, c.ambushedBase - BestPerception * c.ambushedPerPerception));
+            chance += c.ambushedNightBonus * NightPenaltyScale;
+            return Math.Max(0, Math.Min(1, chance));
         }
 
         private bool DetectEvents(MapNodeState n)
         {
-            bool hit = random.NextDouble() < DetectChance();
+            bool hit = n.Definition.forceDetect || (!mapDef.fixedDetection && random.NextDouble() < DetectChance());
             if (hit) log.Add($"  {NodeLabel(n)}: 지각으로 미리 알아챔 — {DescribeEvents(n)}");
             return hit;
         }
 
         // ── 이동 ─────────────────────────────
 
-        /// <summary>지금 노드에 반드시 싸워야 하는 전투가 남아 있는가.</summary>
-        public bool HasForcedBattle => PendingBattle().ev != null;
+        /// <summary>지금 노드에 반드시 싸워야 하는 전투가 남아 있는가 (노드 전투 또는 밤 랜덤 전투).</summary>
+        public bool HasForcedBattle => randomEncounter != null || PendingBattle().ev != null;
+
+        /// <summary>지금 밤 랜덤 전투가 걸려 있는가.</summary>
+        public bool InRandomBattle => randomEncounter != null;
+
+        /// <summary>밤 랜덤 전투 확률: 낮 0, 밤 기본값, 횃불이면 절반.</summary>
+        public double NightBattleChance() => db.Balance.nightRandomBattleChance * NightPenaltyScale;
 
         public bool CanMoveTo(string nodeId) =>
             Phase == ExpeditionPhase.Exploring && !HasForcedBattle && Map.CanMoveTo(nodeId);
@@ -209,10 +264,26 @@ namespace Grimward.Domain.Map
         public MoveResult MoveTo(string nodeId)
         {
             if (!CanMoveTo(nodeId)) throw new InvalidOperationException($"지금은 {nodeId}로 이동할 수 없습니다.");
+            // 시간을 먼저 흘린다: 도착하며 새로 보이는 노드의 지각 탐지는 도착 시각(밤 여부·횃불) 기준
+            Time.AddMinutes(Map.TravelMinutes(nodeId));
             var r = Map.MoveTo(nodeId);
-            Time.AddMinutes(r.Minutes);
+            arrivedFirstVisit = r.FirstVisit;
+            RollNightBattle(r);
             log.Add($"{Time} {NodeLabel(r.To)} 도착 ({r.Minutes}분{(r.FirstTimeOnEdge ? ", 처음 길" : "")})");
             return r;
+        }
+
+        /// <summary>
+        /// 밤 랜덤 전투 (11-13): 이미 방문한 노드에 밤에 다시 도착하면 NightBattleChance로 맵의 nightEncounter 편성과 싸운다.
+        /// 시작 노드·첫 방문·노드 전투가 남은 곳은 제외. 여러 칸 이동은 여기서 멈춘다(HasForcedBattle).
+        /// </summary>
+        private void RollNightBattle(MoveResult r)
+        {
+            if (r.FirstVisit || r.To.IsStart || string.IsNullOrEmpty(mapDef.nightEncounter) || PendingBattle().ev != null) return;
+            double chance = NightBattleChance();
+            if (chance <= 0 || random.NextDouble() >= chance) return;
+            randomEncounter = mapDef.nightEncounter;
+            log.Add($"{Time} 밤 습격! — {NodeLabel(r.To)}");
         }
 
         // ── 노드 이벤트 ─────────────────────────────
@@ -224,6 +295,7 @@ namespace Grimward.Domain.Map
         /// <summary>지금 노드에서 할 수 있는 다음 이벤트 (전투가 남아 있으면 전투가 먼저).</summary>
         public (int index, NodeEventDefinition ev) NextEvent()
         {
+            if (randomEncounter != null) return (-1, RandomBattleEvent());
             var b = PendingBattle();
             if (b.ev != null) return b;
             return Map.Current.PendingEvents().FirstOrDefault();
@@ -233,14 +305,38 @@ namespace Grimward.Domain.Map
         public BattleState BeginBattle()
         {
             if (Phase != ExpeditionPhase.Exploring) throw new InvalidOperationException("지금은 전투를 시작할 수 없습니다.");
-            var (index, ev) = PendingBattle();
+            var (index, ev) = randomEncounter != null ? (-1, RandomBattleEvent()) : PendingBattle();
             if (ev == null) throw new InvalidOperationException("이 노드에는 남은 전투가 없습니다.");
             battleEvent = ev; battleEventIndex = index;
             battle = BattleState.Create(db, random, Party.ToList(), ev.encounter, IsNight, Bag);
+            if (IsNight) battle.SetNightPenaltyScale(NightPenaltyScale);
+            var ambush = RollAmbush(ev);
+            if (ambush != null) battle.ApplyAmbush(ambush.Value, db.Balance.ambushSpeedBonus, db.Balance.ambushRounds);
             battle.Start();
             Phase = ExpeditionPhase.InBattle;
             log.Add($"{Time} 전투 — {db.GetEncounter(ev.encounter).name}{(IsNight ? " (밤)" : "")}");
             return battle;
+        }
+
+        /// <summary>
+        /// 기습 판정 (첫 방문 전투만, 보스·기습 없는 맵 제외):
+        /// 미리 탐지한 노드 → 파티가 기습(확정). 탐지 못 함 → AmbushedChance로 기습당함.
+        /// </summary>
+        public const string AmbushParty = "party";
+        public const string AmbushEnemy = "enemy";
+
+        private BattleSide? RollAmbush(NodeEventDefinition ev)
+        {
+            bool first = arrivedFirstVisit;
+            arrivedFirstVisit = false;
+            if (!first) return null;
+            string fixedAmbush = Map.Current.Definition.ambush;
+            if (fixedAmbush == AmbushParty) { log.Add($"{Time} 기습! (고정)"); return BattleSide.Party; }
+            if (fixedAmbush == AmbushEnemy) { log.Add($"{Time} 기습당했다! (고정)"); return BattleSide.Enemy; }
+            if (Map.Definition.noAmbush || ev.kind == DataKeys.NodeEvent.Boss) return null;
+            if (Map.Current.Detected) { log.Add($"{Time} 기습! (미리 알아챔)"); return BattleSide.Party; }
+            if (random.NextDouble() < AmbushedChance()) { log.Add($"{Time} 기습당했다!"); return BattleSide.Enemy; }
+            return null;
         }
 
         /// <summary>
@@ -256,7 +352,7 @@ namespace Grimward.Domain.Map
             switch (battle.Outcome)
             {
                 case BattleOutcome.Victory:
-                    Map.CompleteEvent(Map.Current.Id, battleEventIndex);
+                    if (battleEventIndex >= 0) Map.CompleteEvent(Map.Current.Id, battleEventIndex); // 밤 랜덤 전투는 노드 이벤트가 아님
                     int minutes = battleEvent.kind == DataKeys.NodeEvent.Boss ? c.bossBattleMinutes : c.battleMinutes;
                     Time.AddMinutes(minutes);
                     log.Add($"{Time} 승리 ({minutes}분)");
@@ -276,7 +372,11 @@ namespace Grimward.Domain.Map
             }
             foreach (var e in battle.Log.Where(e => e.Kind == BattleEventKind.KnockedDown)) log.Add("  " + e.Message);
             battle = null; battleEvent = null;
+            randomEncounter = null;   // 이기든 도주하든 밤 랜덤 전투는 끝난다
         }
+
+        private NodeEventDefinition RandomBattleEvent() =>
+            new NodeEventDefinition { kind = DataKeys.NodeEvent.Battle, encounter = randomEncounter };
 
         /// <summary>채집 (약초밭 등): 아이템을 가방에 넣고 이벤트 완료. 가방 칸 제한은 M2-3.</summary>
         public ItemAmountDefinition Gather(int index)

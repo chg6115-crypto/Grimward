@@ -65,6 +65,12 @@ namespace Grimward.Domain.Data
         public string startNode;
         public MapNodeDefinition[] nodes;
         public MapEdgeDefinition[] edges;
+        /// <summary>true면 이 맵에서는 기습이 없다 (튜토리얼). 노드의 고정 기습(ambush)은 예외.</summary>
+        public bool noAmbush;
+        /// <summary>밤 랜덤 전투 편성 (가중치 로스터 편성 id). 비면 이 맵에는 밤 랜덤 전투가 없다 (튜토리얼).</summary>
+        public string nightEncounter;
+        /// <summary>true면 지각 판정을 하지 않고 forceDetect 노드만 탐지한다 (튜토리얼: 탐지 = 기습을 한 번만 보여 준다).</summary>
+        public bool fixedDetection;
         /// <summary>이 맵의 기본 규칙 메모 (튜토리얼: 진형 붕괴 없음 등). 표시용.</summary>
         public string notes;
     }
@@ -78,6 +84,13 @@ namespace Grimward.Domain.Data
         public int r;
         /// <summary>노드 이벤트 (한 노드에 최대 2개 겹침: 전투+보물, 전투+채집 등). 비어 있으면 빈 노드.</summary>
         public NodeEventDefinition[] events;
+        /// <summary>true면 처음 발견할 때 지각 판정 없이 항상 탐지 (튜토리얼: 기습 알려 주기).</summary>
+        public bool forceDetect;
+        /// <summary>
+        /// 고정 기습: "party"(파티가 기습) · "enemy"(기습당함) · 비면 규칙대로.
+        /// 맵의 noAmbush보다 우선한다 (첫 방문 전투에서만).
+        /// </summary>
+        public string ambush;
     }
 
     /// <summary>
@@ -403,5 +416,7 @@ namespace Grimward.Domain.Data
         public bool cureBleed;
         public int stack;
         public int price;
+        /// <summary>횃불: 전투 밖에서 쓰면 켜지는 시간(분). 남은 시간에 더해진다(최대 torchMaxMinutes).</summary>
+        public int torchMinutes;
     }
 }

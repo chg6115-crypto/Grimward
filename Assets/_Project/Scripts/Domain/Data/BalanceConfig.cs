@@ -81,6 +81,30 @@ namespace Grimward.Domain.Data
         public double perceptionDetectMin;
         public double perceptionDetectMax;
 
+        // ── 밤 · 횃불 (11-13) ──
+        /// <summary>밤 지각 탐지 감소 (%p, 0.2 = −20%p).</summary>
+        public double nightDetectPenalty;
+        /// <summary>횃불이 켜져 있을 때 밤 지각 탐지 가산 (%p).</summary>
+        public double torchDetectBonus;
+        /// <summary>횃불이 켜져 있을 때 그 밖의 밤 패널티 배율 (0.5 = 절반: 밤 명중 · 밤 기습 · 밤 랜덤 전투).</summary>
+        public double torchNightPenaltyMultiplier;
+        /// <summary>횃불 지속시간 최대(분). 지속시간이 쌓인다 (240 × 3 = 720).</summary>
+        public int torchMaxMinutes;
+
+        /// <summary>밤 랜덤 전투: 이미 방문한 노드(시작 노드 제외)에 밤에 다시 도착할 때 확률. 횃불이면 torchNightPenaltyMultiplier배.</summary>
+        public double nightRandomBattleChance;
+
+        // ── 기습 (11-13) ──
+        /// <summary>탐지하지 못한 전투에서 기습당할 확률 = Clamp(기본 − 최고 지각 × 계수, 최소, 최대) + 밤 가산.</summary>
+        public double ambushedBase;
+        public double ambushedPerPerception;
+        public double ambushedMin;
+        public double ambushedMax;
+        public double ambushedNightBonus;
+        /// <summary>기습한 쪽 전원 속도 가산과 지속 라운드.</summary>
+        public int ambushSpeedBonus;
+        public int ambushRounds;
+
         // 가방
         public int bagSlots;
 

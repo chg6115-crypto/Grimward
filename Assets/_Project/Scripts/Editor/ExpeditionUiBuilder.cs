@@ -22,6 +22,9 @@ namespace Grimward.EditorTools
         private const string PrefabPath = "Assets/_Project/Prefabs/UI/Panel_Battle.prefab";
         private const string HexArt = "Assets/_Project/Art/Hex/";
         private const string MapArtFolder = "Assets/_Project/Art/Map/";
+        /// <summary>임시 아트 폴더 (사용자가 넣는 임시 이미지). 정식 아트가 생기면 경로만 바꾼다.</summary>
+        private const string TempArtFolder = "Assets/_Project/Art/Temp/";
+        private const string StageBackground = TempArtFolder + "map_forest.png";
         private const string FontAssetPath = "Assets/_Project/Art/Fonts/NotoSansKR SDF.asset";
 
         /// <summary>육각 칸 가로 폭(px, 1920×1080 기준). 칸 그림은 여백이 있어 이미지 크기는 폭 × 512/422.</summary>
@@ -61,24 +64,31 @@ namespace Grimward.EditorTools
             Debug.Log($"Grimward: 전투 화면을 프리팹으로 저장했습니다 ({PrefabPath}). 시계 · 지도 버튼 · 무대 골동품 · 골동품 창 · 큰 글자를 붙였습니다 (이미 있으면 그대로 둠).");
         }
 
-        // 골동품 창: 물건(적 2번 칸) 오른쪽, 적 3·4번 칸 위
-        private static readonly Vector2 CurioWindowMin = new Vector2(.76f, .47f);
-        private static readonly Vector2 CurioWindowMax = new Vector2(.99f, .9f);
-
         private static bool Near(Vector2 a, Vector2 b) => (a - b).sqrMagnitude < 1e-5f;
 
-        /// <summary>
-        /// 무대 물건을 적 2번 칸 자리에 두고 몬스터 칸들보다 먼저(뒤에) 그린다.
-        /// 손으로 옮긴 위치는 그대로 두고, 처음 만든 기본 위치(파티·적 사이)일 때만 옮긴다.
-        /// </summary>
+        /// <summary>Panel_Field 안 좌표(0~1) → Panel_Battle 안 좌표.</summary>
+        private static Vector2 FieldToPanel(RectTransform field, Vector2 p) =>
+            new Vector2(Mathf.Lerp(field.anchorMin.x, field.anchorMax.x, p.x), Mathf.Lerp(field.anchorMin.y, field.anchorMax.y, p.y));
+
+        /// <summary>골동품 창 = 적 2번 칸 왼쪽 ~ 4번 칸 오른쪽, 무대 높이.</summary>
+        private static (Vector2 min, Vector2 max) CurioWindowRect(Transform field)
+        {
+            var f = field as RectTransform;
+            var s2 = field.Find("Btn_EnemySlot2") as RectTransform;
+            var s4 = field.Find("Btn_EnemySlot4") as RectTransform;
+            if (f == null || s2 == null || s4 == null) return (new Vector2(.6f, .47f), new Vector2(.99f, .9f));
+            return (FieldToPanel(f, new Vector2(s2.anchorMin.x, .06f)), FieldToPanel(f, new Vector2(s4.anchorMax.x, .94f)));
+        }
+
+        /// <summary>무대 물건을 적 1번 칸 자리에 두고 몬스터 칸들보다 먼저(뒤에) 그린다.</summary>
         private static void PlaceCurio(RectTransform curio, Transform field)
         {
-            var slot2 = field.Find("Btn_EnemySlot2") as RectTransform;
-            bool isDefault = Near(curio.anchorMin, new Vector2(.445f, .12f)) && Near(curio.anchorMax, new Vector2(.555f, .72f));
-            if (slot2 != null && isDefault)
+            var slot1 = field.Find("Btn_EnemySlot1") as RectTransform;
+            if (slot1 != null)
             {
-                curio.anchorMin = new Vector2(slot2.anchorMin.x, .12f);
-                curio.anchorMax = new Vector2(slot2.anchorMax.x, .72f);
+                curio.anchorMin = new Vector2(slot1.anchorMin.x, .12f);
+                curio.anchorMax = new Vector2(slot1.anchorMax.x, .72f);
+                curio.offsetMin = curio.offsetMax = Vector2.zero;
             }
             int first = int.MaxValue;
             for (int rank = 1; rank <= 4; rank++)
@@ -121,9 +131,28 @@ namespace Grimward.EditorTools
                 }
             }
 
-            // 무대 물건: 적 2번 칸 자리, 몬스터보다 뒤에 그린다 (모바일에서 파티·적 사이 공간이 좁으므로)
+            // 무대 배경 (임시: Art/Temp/map_forest.png). 무대 영역을 꽉 채우고(비율 유지, 넘치는 부분은 잘림) 맨 뒤에 그린다.
+            var bgRoot = field.Find("Panel_StageBg") as RectTransform;
+            if (bgRoot == null)
+            {
+                bgRoot = UiBuild.Rect("Panel_StageBg", field, Vector2.zero, Vector2.one);
+                bgRoot.gameObject.AddComponent<RectMask2D>();
+                var bg = UiBuild.Image("Img_StageBg", bgRoot, new Vector2(.5f, .5f), new Vector2(.5f, .5f), Color.white);
+                bg.raycastTarget = false;
+                var fit = bg.gameObject.AddComponent<AspectRatioFitter>();
+                fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+                var sprite = SpriteAt(StageBackground);
+                bg.sprite = sprite;
+                if (sprite != null) fit.aspectRatio = sprite.rect.width / sprite.rect.height;
+                // 원래 있던 어두운 바닥 띠는 배경이 보이도록 옅게
+                var ground = field.Find("Img_Ground")?.GetComponent<Image>();
+                if (ground != null) ground.color = new Color(ground.color.r, ground.color.g, ground.color.b, .25f);
+            }
+            bgRoot.SetSiblingIndex(0);
+
+            // 무대 물건: 적 1번 칸 자리, 몬스터보다 뒤에 그린다 (이름은 무대에 표시하지 않고 창에서만)
             var curio = field.Find("Btn_Curio")?.GetComponent<Button>();
-            Image curioImg; TMP_Text curioName;
+            Image curioImg;
             if (curio == null)
             {
                 var root = UiBuild.Image("Btn_Curio", field, new Vector2(.445f, .12f), new Vector2(.555f, .72f), new Color(1, 1, 1, 0), true);
@@ -132,15 +161,10 @@ namespace Grimward.EditorTools
                 curioImg = UiBuild.Image("Img_Curio", root.transform, new Vector2(.05f, .22f), new Vector2(.95f, 1f), Color.white);
                 curioImg.preserveAspect = true;
                 curio.targetGraphic = curioImg;
-                curioName = UiBuild.Text("Txt_CurioName", root.transform, "", 20, new Vector2(-.3f, 0f), new Vector2(1.3f, .2f),
-                    TextAlignmentOptions.Center, UiBuild.Gold);
-                curioName.textWrappingMode = TextWrappingModes.NoWrap;
             }
-            else
-            {
-                curioImg = curio.transform.Find("Img_Curio")?.GetComponent<Image>();
-                curioName = curio.transform.Find("Txt_CurioName")?.GetComponent<TMP_Text>();
-            }
+            else curioImg = curio.transform.Find("Img_Curio")?.GetComponent<Image>();
+            var oldName = curio.transform.Find("Txt_CurioName");
+            if (oldName != null) Object.DestroyImmediate(oldName.gameObject);
             PlaceCurio((RectTransform)curio.transform, field);
 
             // 큰 글자 (승리 · 도주 · 전멸)
@@ -153,38 +177,32 @@ namespace Grimward.EditorTools
                 banner.raycastTarget = false;
             }
 
-            // 골동품 창: 물건 오른쪽 위 (다키스트 던전식)
-            var window = panel.Find("Panel_Curio")?.GetComponent<CurioWindow>();
-            if (window != null && window.transform is RectTransform wr && Near(wr.anchorMin, new Vector2(.585f, .47f)))
-            {   // 이전 기본 위치(물건과 겹침)였으면 오른쪽으로 옮긴다
-                wr.anchorMin = CurioWindowMin; wr.anchorMax = CurioWindowMax;
-            }
-            if (window == null)
-            {
-                var box = UiBuild.Image("Panel_Curio", panel, CurioWindowMin, CurioWindowMax,
-                    new Color(0.1f, 0.09f, 0.08f, 0.97f), true).transform;
-                var border = box.gameObject.AddComponent<Outline>();
-                border.effectColor = new Color(.6f, .48f, .25f, 1f);
-                border.effectDistance = new Vector2(3, -3);
-                var title = UiBuild.Text("Txt_CurioTitle", box, "", 30, new Vector2(.05f, .8f), new Vector2(.95f, .96f),
-                    TextAlignmentOptions.Center, UiBuild.Gold);
-                var body = UiBuild.Text("Txt_CurioBody", box, "", 22, new Vector2(.06f, .36f), new Vector2(.94f, .79f),
-                    TextAlignmentOptions.Center);
-                body.overflowMode = TextOverflowModes.Overflow;
-                var act = UiBuild.Button("Btn_CurioAct", box, "조사한다", 24, new Vector2(.05f, .05f), new Vector2(.4f, .32f));
-                var supply = UiBuild.Button("Btn_CurioSupply", box, "보급품", 22, new Vector2(.43f, .05f), new Vector2(.75f, .32f));
-                var close = UiBuild.Button("Btn_CurioClose", box, "X", 30, new Vector2(.78f, .05f), new Vector2(.95f, .32f));
-                window = box.gameObject.AddComponent<CurioWindow>();
-                window.Assign(title, body, act, supply, close);
-                EditorUtility.SetDirty(window);
-                // 떠오르는 글자·툴팁보다 아래
-                var floating = panel.Find("Panel_FloatingText");
-                if (floating != null) box.SetSiblingIndex(floating.GetSiblingIndex());
-                box.gameObject.SetActive(false);
-            }
+            // 골동품 창: 적 2·3·4번 칸 자리 (물건 오른쪽). 버튼 [조사한다] [아이템을 사용한다] [지나간다]
+            var oldWindow = panel.Find("Panel_Curio");
+            if (oldWindow != null) Object.DestroyImmediate(oldWindow.gameObject); // 배치가 바뀌어 새로 만든다
+            var (wMin, wMax) = CurioWindowRect(field);
+            var box = UiBuild.Image("Panel_Curio", panel, wMin, wMax, new Color(0.1f, 0.09f, 0.08f, 0.97f), true).transform;
+            var border = box.gameObject.AddComponent<Outline>();
+            border.effectColor = new Color(.6f, .48f, .25f, 1f);
+            border.effectDistance = new Vector2(3, -3);
+            var title = UiBuild.Text("Txt_CurioTitle", box, "", 32, new Vector2(.05f, .8f), new Vector2(.95f, .96f),
+                TextAlignmentOptions.Center, UiBuild.Gold);
+            var body = UiBuild.Text("Txt_CurioBody", box, "", 24, new Vector2(.06f, .36f), new Vector2(.94f, .79f),
+                TextAlignmentOptions.Center);
+            body.overflowMode = TextOverflowModes.Overflow;
+            var act = UiBuild.Button("Btn_CurioAct", box, "조사한다", 24, new Vector2(.04f, .05f), new Vector2(.33f, .3f));
+            var supply = UiBuild.Button("Btn_CurioSupply", box, "아이템을 사용한다", 22, new Vector2(.355f, .05f), new Vector2(.645f, .3f));
+            var close = UiBuild.Button("Btn_CurioClose", box, "지나간다", 24, new Vector2(.67f, .05f), new Vector2(.96f, .3f));
+            var window = box.gameObject.AddComponent<CurioWindow>();
+            window.Assign(title, body, act, supply, close);
+            EditorUtility.SetDirty(window);
+            // 떠오르는 글자·툴팁보다 아래
+            var floating = panel.Find("Panel_FloatingText");
+            if (floating != null) box.SetSiblingIndex(floating.GetSiblingIndex());
+            box.gameObject.SetActive(false);
 
             var log = FindDeep(panel, "Panel_Log");
-            screen.AssignStage(mapBtn, curio, curioImg, curioName, window, banner, log != null ? log.gameObject : null);
+            screen.AssignStage(mapBtn, curio, curioImg, null, window, banner, log != null ? log.gameObject : null);
             EditorUtility.SetDirty(screen);
         }
 
@@ -234,9 +252,11 @@ namespace Grimward.EditorTools
         private static Sprite Hex(string file) => AssetDatabase.LoadAssetAtPath<Sprite>(HexArt + file);
 
         /// <summary>지도 임시 아트. 자동 분할(Multiple)되면 점선 길이 조각나므로 Single·가운데 피벗으로 맞춘 뒤 읽는다.</summary>
-        private static Sprite MapArt(string file)
+        private static Sprite MapArt(string file) => SpriteAt(MapArtFolder + file);
+
+        /// <summary>스프라이트를 Single·가운데 피벗으로 맞춘 뒤 읽는다 (자동 분할 방지).</summary>
+        private static Sprite SpriteAt(string path)
         {
-            string path = MapArtFolder + file;
             if (AssetImporter.GetAtPath(path) is TextureImporter ti &&
                 (ti.textureType != TextureImporterType.Sprite || ti.spriteImportMode != SpriteImportMode.Single))
             {
@@ -248,7 +268,7 @@ namespace Grimward.EditorTools
                 ti.SaveAndReimport();
             }
             var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
-            if (sprite == null) Debug.LogWarning($"Grimward: 지도 아트가 없습니다 ({path}).");
+            if (sprite == null) Debug.LogWarning($"Grimward: 아트가 없습니다 ({path}).");
             return sprite;
         }
 
@@ -263,8 +283,9 @@ namespace Grimward.EditorTools
             // 창 (1920×1080 기준 약 1540×950). 창 안을 눌러도 닫히지 않도록 창 바탕이 클릭을 받는다.
             var border = UiBuild.Image("Img_MapWindowBorder", root, new Vector2(.1f, .06f), new Vector2(.9f, .94f), new Color(.55f, .45f, .25f, .9f));
             border.rectTransform.offsetMin = new Vector2(-4, -4); border.rectTransform.offsetMax = new Vector2(4, 4);
+            // 바탕 = 칸 사이 틈 색. 칸이 떠 보이도록 흙빛 갈색 (Inspector에서 Image 색으로 조정)
             var window = UiBuild.Image("Panel_MapWindow", root, new Vector2(.1f, .06f), new Vector2(.9f, .94f),
-                new Color(0.07f, 0.075f, 0.065f, 1f), true).transform;
+                new Color(0.40f, 0.35f, 0.26f, 1f), true).transform;
 
             // 제목 줄: 왼쪽 구역 이름 + 예상귀환시간 / 오른쪽 이동 정보 + 이동 버튼 + X
             var header = UiBuild.Image("Panel_MapHeader", window, new Vector2(0, .89f), new Vector2(1, 1), new Color(0, 0, 0, .4f)).transform;

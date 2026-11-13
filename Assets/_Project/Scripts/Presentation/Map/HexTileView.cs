@@ -43,6 +43,13 @@ namespace Grimward.Presentation.Map
             this.nameText = nameText; this.fog = fog;
         }
 
+        /// <summary>노드 칸(채움·테두리) 크기 배율. 칸 사이 간격을 정한다 (1 = 이웃과 거의 붙음).</summary>
+        public void SetNodeScale(float scale)
+        {
+            fill.rectTransform.localScale = new Vector3(scale, scale, 1f);
+            outline.rectTransform.localScale = new Vector3(scale, scale, 1f);
+        }
+
         private void Awake()
         {
             if (button != null) button.onClick.AddListener(() => Clicked?.Invoke(this));

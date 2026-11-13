@@ -64,6 +64,7 @@ namespace Grimward.Presentation.Bootstrap
             stage.PartySwapRequested += OnPartySwap;
             stage.ItemUseRequested += OnItemUse;
             stage.OutsideItemFilter = Expedition.IsUsableOutsideBattle;
+            stage.OutsideItemInstant = Expedition.IsInstantOutsideBattle;
             mapScreen.TravelRequested += OnTravel;
             mapScreen.ReturnRequested += OnReturn;
             NewExpedition();
@@ -101,8 +102,18 @@ namespace Grimward.Presentation.Bootstrap
         private void ShowStage(bool animateClock = true)
         {
             var x = expedition;
-            stage.ShowExplore(x.Party, x.Bag, db, sprites, x.Time, Expedition.NodeLabel(x.Map.Current), animateClock);
+            stage.ShowExplore(x.Party, x.Bag, db, sprites, x.Time, PlaceText(), animateClock);
             UpdateCurio();
+        }
+
+        /// <summary>상단 장소 줄: 장소 이름 (+ 횃불 남은 시간).</summary>
+        private string PlaceText()
+        {
+            var x = expedition;
+            string place = Expedition.NodeLabel(x.Map.Current);
+            if (!x.TorchLit) return place;
+            int m = x.TorchMinutesLeft;
+            return $"{place}   <size=80%><color=#f3b45a>횃불 {m / 60}시간{(m % 60 > 0 ? $" {m % 60}분" : "")}</color></size>";
         }
 
         /// <summary>무대 가운데 물건 = 이 노드에 남은 채집·조사 이벤트 (전투 중에도 그대로 보인다).</summary>
@@ -163,8 +174,10 @@ namespace Grimward.Presentation.Bootstrap
         private IEnumerator BattleSoon()
         {
             yield return new WaitForSeconds(battleDelay);
+            bool nightRaid = expedition.InRandomBattle;
             var battle = expedition.BeginBattle();
-            stage.ShowBattle(battle, db, sprites, expedition.Time, OnBattleFinished);
+            stage.ShowBattle(battle, db, sprites, expedition.Time, OnBattleFinished,
+                nightRaid ? "<color=#9ab0ff>밤 습격!</color>" : null);
         }
 
         private void OnBattleFinished()
@@ -187,7 +200,7 @@ namespace Grimward.Presentation.Bootstrap
         private void OnItemUse(string itemId, int rank)
         {
             if (expedition.Phase != ExpeditionPhase.Exploring) return;
-            var target = expedition.Alive.ElementAtOrDefault(rank - 1);
+            var target = rank > 0 ? expedition.Alive.ElementAtOrDefault(rank - 1) : null;   // 횃불은 대상 없음
             string text;
             try { text = expedition.UseItem(itemId, target); }
             catch (System.InvalidOperationException e) { stage.SetInfo(e.Message); return; }
@@ -211,9 +224,12 @@ namespace Grimward.Presentation.Bootstrap
             {
                 var obj = db.GetInvestigation(ev.objectId);
                 bool hasSupplySlot = !string.IsNullOrEmpty(obj.supplyItem);
-                string supplyLabel = hasSupplySlot ? $"{db.GetItem(obj.supplyItem).name} 사용" : null;
-                bool has = hasSupplySlot && expedition.Bag.Count(obj.supplyItem) > 0;
-                stage.Curio.ShowEvent(obj.name, obj.situation, "조사한다", supplyLabel, has);
+                string supplyLabel = "아이템을 사용한다";
+                int count = hasSupplySlot ? expedition.Bag.Count(obj.supplyItem) : 0;
+                string body = obj.situation + (hasSupplySlot
+                    ? $"\n\n<size=85%><color=#cbbf9a>쓸 수 있는 아이템: {db.GetItem(obj.supplyItem).name} (보유 {count})</color></size>"
+                    : "");
+                stage.Curio.ShowEvent(obj.name, body, "조사한다", supplyLabel, count > 0);
             }
         }
 
@@ -221,6 +237,12 @@ namespace Grimward.Presentation.Bootstrap
         {
             var (index, ev) = expedition.NextEvent();
             if (ev == null) return;
+            if (useSupply && !CanUseSupply(ev))
+            {
+                // 맞는 아이템이 없거나 이 물건에는 쓸 아이템이 없다: 아무것도 소모하지 않고, 창은 그대로
+                stage.Curio.ShowNote("아무 일도 일어나지 않았다.");
+                return;
+            }
             if (ev.kind == DataKeys.NodeEvent.Gather)
             {
                 var got = expedition.Gather(index);
@@ -234,7 +256,15 @@ namespace Grimward.Presentation.Bootstrap
                 stage.Curio.ShowResult(db.GetInvestigation(ev.objectId).name, $"[{grade}] {o.Text}{gained}");
             }
             // 가방·HP가 바뀌었을 수 있으니 무대를 다시 그린다 (물건은 결과창을 닫을 때 사라진다)
-            stage.ShowExplore(expedition.Party, expedition.Bag, db, sprites, expedition.Time, Expedition.NodeLabel(expedition.Map.Current));
+            stage.ShowExplore(expedition.Party, expedition.Bag, db, sprites, expedition.Time, PlaceText());
+        }
+
+        /// <summary>이 이벤트에 맞는 아이템(조사 물건의 supplyItem)을 가지고 있는가.</summary>
+        private bool CanUseSupply(NodeEventDefinition ev)
+        {
+            if (ev.kind != DataKeys.NodeEvent.Investigate) return false;
+            var item = db.GetInvestigation(ev.objectId).supplyItem;
+            return !string.IsNullOrEmpty(item) && expedition.Bag.Count(item) > 0;
         }
 
         /// <param name="afterResult">결과를 본 뒤 닫았으면 true, 아무것도 안 하고 지나갔으면 false.</param>

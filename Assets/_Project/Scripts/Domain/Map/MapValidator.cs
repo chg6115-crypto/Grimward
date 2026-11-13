@@ -30,7 +30,11 @@ namespace Grimward.Domain.Map
                 var c = new HexCoord(n.q, n.r);
                 if (!coords.Add(c)) e.Add($"{p}: 좌표 중복 {c}");
                 if (m.radius > 0 && c.DistanceFromOrigin > m.radius) e.Add($"{p}: 노드 {n.id} 좌표 {c}가 반경 {m.radius} 밖");
+                if (!string.IsNullOrEmpty(n.ambush) && n.ambush != Expedition.AmbushParty && n.ambush != Expedition.AmbushEnemy)
+                    e.Add($"{p}: 노드 {n.id} 고정 기습 '{n.ambush}' (party · enemy)");
             }
+            if (!string.IsNullOrEmpty(m.nightEncounter) && !db.HasEncounter(m.nightEncounter))
+                e.Add($"{p}: 밤 랜덤 전투 편성 '{m.nightEncounter}' 없음");
             if (string.IsNullOrEmpty(m.startNode) || !byId.ContainsKey(m.startNode)) { e.Add($"{p}: 시작 노드 '{m.startNode}' 없음"); return e; }
 
             var adj = byId.Keys.ToDictionary(k => k, k => new HashSet<string>());

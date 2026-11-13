@@ -122,6 +122,8 @@ namespace Grimward.Presentation.Battle
         public event Action<string, int> ItemUseRequested;
         /// <summary>전투 밖에서 쓸 수 있는 아이템 판정 (출정 규칙). 비어 있으면 아이템을 쓸 수 없다.</summary>
         public Func<ItemDefinition, bool> OutsideItemFilter { get; set; }
+        /// <summary>대상 없이 바로 쓰는 전투 밖 아이템 (횃불). 누르면 ItemUseRequested(아이템, 0).</summary>
+        public Func<ItemDefinition, bool> OutsideItemInstant { get; set; }
         public Map.CurioWindow Curio => curioWindow;
 
         /// <summary>에디터 UI 빌더 전용.</summary>
@@ -236,13 +238,17 @@ namespace Grimward.Presentation.Battle
         /// 끝나면 결과창 없이 가운데에 「승리 · 도주 · 전멸」을 잠깐 띄운 뒤 onFinished를 부른다.
         /// </summary>
         public void ShowBattle(BattleState battleState, GameDatabase database, Data.SpriteCatalog spriteCatalog,
-            Domain.Core.GameTime time, Action finished)
+            Domain.Core.GameTime time, Action finished, string openingBanner = null)
         {
             Show(battleState, database, null, spriteCatalog, time);
             expeditionBattle = true;
             onFinished = finished;
             if (curioWindow != null) curioWindow.Hide();
             SetStageButtons();
+            if (battleState.AmbushSide != null)
+                StartCoroutine(FlashBanner(battleState.AmbushSide == BattleSide.Party ? "기습!" : "<color=#e77>기습당했다!</color>"));
+            else if (openingBanner != null)
+                StartCoroutine(FlashBanner(openingBanner));
         }
 
         /// <summary>전투가 아닐 때의 무대: 파티(목록 순서 = 칸 순서) · 가방 · 장소 이름 · 「지도」 버튼. 기술 칸은 회색.</summary>
@@ -278,7 +284,7 @@ namespace Grimward.Presentation.Battle
             curioButton.gameObject.SetActive(sprite != null);
             if (sprite == null) return;
             if (curioImage != null) { curioImage.sprite = sprite; curioImage.preserveAspect = true; }
-            if (curioLabel != null) curioLabel.text = label ?? "";
+            if (curioLabel != null) curioLabel.text = ""; // 이름은 무대에 띄우지 않는다 (창에서만)
         }
 
         /// <summary>출정 결과 (귀환·전멸). 버튼을 누르면 action.</summary>
@@ -306,6 +312,15 @@ namespace Grimward.Presentation.Battle
             if (mapButton != null) mapButton.gameObject.SetActive(exploring);
             fleeButton.gameObject.SetActive(!exploring);
             if (curioButton != null) curioButton.interactable = exploring;
+        }
+
+        private IEnumerator FlashBanner(string text)
+        {
+            if (bannerText == null) yield break;
+            bannerText.text = text;
+            bannerText.gameObject.SetActive(true);
+            yield return new WaitForSeconds(bannerSeconds / speed);
+            if (!finishing) bannerText.gameObject.SetActive(false);
         }
 
         private IEnumerator FinishBanner()
@@ -413,6 +428,12 @@ namespace Grimward.Presentation.Battle
             if (exploring)
             {
                 if (OutsideItemFilter == null || !OutsideItemFilter(db.GetItem(itemId))) return;
+                if (OutsideItemInstant != null && OutsideItemInstant(db.GetItem(itemId)))
+                {
+                    ClearSelection();
+                    ItemUseRequested?.Invoke(itemId, 0);
+                    return;
+                }
                 if (selectedItem == itemId) { ClearSelection(); return; }
                 selectedSkill = -1; selectedItem = itemId;
                 infoText.text = $"{db.GetItem(itemId).name}: 모험가를 고르세요";

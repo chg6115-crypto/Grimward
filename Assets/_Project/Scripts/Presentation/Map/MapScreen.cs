@@ -35,6 +35,8 @@ namespace Grimward.Presentation.Map
         [SerializeField] private ScrollRect scroll;
         [SerializeField] private MapZoom zoom;
         [SerializeField] private float followSeconds = 0.35f;
+        [Tooltip("노드 칸 크기 배율 = 칸 사이 간격. 0.96 → 간격 약 12px, 0.85 → 약 36px(3배), 1 → 거의 붙음 (칸 간격 220px 기준)")]
+        [SerializeField, Range(0.6f, 1f)] private float nodeScale = 0.85f;
 
         [Header("아이콘")]
         [SerializeField] private Sprite iconStart;
@@ -96,7 +98,7 @@ namespace Grimward.Presentation.Map
 
         private void Awake()
         {
-            foreach (var t in tiles) t.Clicked += OnTileClicked;
+            foreach (var t in tiles) { t.Clicked += OnTileClicked; t.SetNodeScale(nodeScale); }
             dimButton.onClick.AddListener(Close);
             closeButton.onClick.AddListener(Close);
             travelButton.onClick.AddListener(() => { if (selectedId != null) TravelRequested?.Invoke(selectedId); });
@@ -180,7 +182,7 @@ namespace Grimward.Presentation.Map
                 var outline = node.Id == selectedId ? selectedOutline : movable ? movableOutline : normalOutline;
                 var icon = Icon(node, out bool question);
                 tile.ShowNode(node.Visited ? visitedFill : unexploredFill, outline, icon, question, current,
-                    Expedition.NodeLabel(node), node.Visited ? nameColor : dimNameColor, movable);
+                    Label(node), node.Visited ? nameColor : dimNameColor, movable);
                 for (int d = 0; d < 6; d++)
                 {
                     var nb = Neighbor(node.Coord, d);
@@ -215,14 +217,27 @@ namespace Grimward.Presentation.Map
             }
         }
 
+        /// <summary>
+        /// 칸 표시 (11-13): 안 가 본 칸 = 「?」 (탐지했으면 종류만: 전투 ⚔ / 그 밖은 골동품 아이콘).
+        /// 방문한 칸 = 남은 일의 아이콘(종류별). 출발점 = 야영.
+        /// </summary>
         private Sprite Icon(MapNodeState node, out bool question)
         {
             question = false;
             if (node.IsStart) return iconStart;
-            if (!node.HasEvents || node.Completed || !node.EventsRevealed) return null;
-            question = !node.Visited;
+            if (!node.Visited)
+            {
+                question = true;
+                if (!node.Detected || !node.HasEvents) return null;
+                bool battle = node.PendingEvents().Any(p => p.ev.kind == DataKeys.NodeEvent.Battle || p.ev.kind == DataKeys.NodeEvent.Boss);
+                return battle ? iconBattle : iconInvestigate;
+            }
+            if (!node.HasEvents || node.Completed) return null;
             return IconFor(node.PendingEvents().First().ev.kind);
         }
+
+        /// <summary>방문한 칸만 이름을 보여 준다.</summary>
+        private static string Label(MapNodeState node) => node.Visited ? Expedition.NodeLabel(node) : "";
 
         private void RefreshHeader()
         {
@@ -237,7 +252,8 @@ namespace Grimward.Presentation.Map
                 var node = x.Map.Node(selectedId);
                 var (path, minutes) = x.Route(selectedId);
                 var at = x.TravelArrival(selectedId);
-                travelText.text = $"{Expedition.NodeLabel(node)}  <size=80%><color=#cbbf9a>{path.Count}칸 · {Duration(minutes)} → {Clock(at, x.Time)} 도착</color></size>";
+                string name = node.Visited ? Expedition.NodeLabel(node) : "미탐색 지역";
+                travelText.text = $"{name}  <size=80%><color=#cbbf9a>{path.Count}칸 · {Duration(minutes)} → {Clock(at, x.Time)} 도착</color></size>";
             }
             else if (x.HasForcedBattle) travelText.text = "<size=80%><color=#e77>전투를 끝내야 움직일 수 있다</color></size>";
             else travelText.text = "<size=80%><color=#8a8a80>금색 테두리 칸을 눌러 목적지를 고른다</color></size>";

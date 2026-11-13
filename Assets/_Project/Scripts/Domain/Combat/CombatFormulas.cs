@@ -8,11 +8,11 @@ namespace Grimward.Domain.Combat
     {
         /// <param name="accuracyBonus">기술 명중 보정 + 버프 (명중 수치, %p와 같은 단위).</param>
         public static double HitChance(BalanceConfig c, int attackerAccuracy, int defenderDodge,
-            double accuracyBonus, BattleSide attackerSide, bool isNight)
+            double accuracyBonus, BattleSide attackerSide, bool isNight, double nightScale = 1.0)
         {
             double chance = c.baseHitChance + (accuracyBonus + attackerAccuracy - defenderDodge) / 100.0;
             if (isNight)
-                chance += attackerSide == BattleSide.Party ? -c.nightPartyAccuracyPenalty : c.nightEnemyAccuracyBonus;
+                chance += (attackerSide == BattleSide.Party ? -c.nightPartyAccuracyPenalty : c.nightEnemyAccuracyBonus) * nightScale;
             return Clamp(chance, c.hitChanceMin, c.hitChanceMax);
         }
 

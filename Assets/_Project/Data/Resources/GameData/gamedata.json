@@ -136,7 +136,19 @@
   "perceptionDetectBase": 0.1,
   "perceptionDetectPerPoint": 0.05,
   "perceptionDetectMin": 0.05,
-  "perceptionDetectMax": 0.9
+  "perceptionDetectMax": 0.9,
+  "nightDetectPenalty": 0.2,
+  "torchDetectBonus": 0.1,
+  "torchNightPenaltyMultiplier": 0.5,
+  "torchMaxMinutes": 720,
+  "ambushedBase": 0.3,
+  "ambushedPerPerception": 0.03,
+  "ambushedMin": 0.05,
+  "ambushedMax": 0.3,
+  "ambushedNightBonus": 0.1,
+  "ambushSpeedBonus": 5,
+  "ambushRounds": 1,
+  "nightRandomBattleChance": 0.2
  },
  "classes": [
   {
@@ -3874,6 +3886,7 @@
    "curePoison": false,
    "stack": 5,
    "price": 10,
+   "torchMinutes": 240,
    "treatInjury": false,
    "cureBleed": false
   },
@@ -3903,16 +3916,21 @@
    "id": "tutorial",
    "name": "튜토리얼: 약초밭 가는 길",
    "region": "얕은 숲",
+   "noAmbush": true,
+   "fixedDetection": true,
+   "nightEncounter": "",
    "radius": 2,
    "startNode": "n1",
-   "notes": "고정 맵·고정 배치. 진형 붕괴 없음, 조사 결과 좋음 고정, 출발 시 열쇠 1개. 밤 20:00 악마 등장",
+   "notes": "고정 맵·고정 배치. 진형 붕괴 없음, 조사 결과 좋음 고정, 출발 시 열쇠 1개. 밤 20:00 악마 등장. 기습은 3번 갈림길만(2번에서 탐지 → 확정 기습), 그 밖은 없음",
    "nodes": [
     {
      "id": "n1",
      "name": "숲 입구",
      "q": -2,
      "r": 0,
-     "events": []
+     "events": [],
+     "forceDetect": false,
+     "ambush": ""
     },
     {
      "id": "n2",
@@ -3928,7 +3946,9 @@
        "objectId": "",
        "fixedResult": ""
       }
-     ]
+     ],
+     "forceDetect": false,
+     "ambush": ""
     },
     {
      "id": "n3",
@@ -3944,7 +3964,9 @@
        "objectId": "",
        "fixedResult": ""
       }
-     ]
+     ],
+     "forceDetect": true,
+     "ambush": "party"
     },
     {
      "id": "n4",
@@ -3968,7 +3990,9 @@
        "objectId": "",
        "fixedResult": ""
       }
-     ]
+     ],
+     "forceDetect": false,
+     "ambush": ""
     },
     {
      "id": "n5",
@@ -3984,7 +4008,9 @@
        "objectId": "C01",
        "fixedResult": "good"
       }
-     ]
+     ],
+     "forceDetect": false,
+     "ambush": ""
     },
     {
      "id": "n6",
@@ -4000,7 +4026,9 @@
        "objectId": "C02",
        "fixedResult": "good"
       }
-     ]
+     ],
+     "forceDetect": false,
+     "ambush": ""
     }
    ],
    "edges": [

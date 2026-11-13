@@ -1,10 +1,10 @@
 fileFormatVersion: 2
-guid: ce4f085e235cde14ab496adfea6bfae9
+guid: 0c721ed48bc5b8e4280579bf45b31eb5
 TextureImporter:
   internalIDToNameTable:
   - first:
-      213: -6259986421472185782
-    second: player_priest_0
+      213: -6130539046214941054
+    second: map_forest_0
   externalObjects: {}
   serializedVersion: 13
   mipmaps:
@@ -115,13 +115,13 @@ TextureImporter:
     serializedVersion: 2
     sprites:
     - serializedVersion: 2
-      name: player_priest_0
+      name: map_forest_0
       rect:
         serializedVersion: 2
         x: 0
         y: 0
-        width: 1086
-        height: 1448
+        width: 2172
+        height: 724
       alignment: 0
       pivot: {x: 0, y: 0}
       border: {x: 0, y: 0, z: 0, w: 0}
@@ -130,8 +130,8 @@ TextureImporter:
       physicsShape: []
       tessellationDetail: -1
       bones: []
-      spriteID: a42b169348f0029a0800000000000000
-      internalID: -6259986421472185782
+      spriteID: 28642bce733fbeaa0800000000000000
+      internalID: -6130539046214941054
       vertices: []
       indices: 
       edges: []
@@ -150,7 +150,7 @@ TextureImporter:
     spriteCustomMetadata:
       entries: []
     nameFileIdTable:
-      player_priest_0: -6259986421472185782
+      map_forest_0: -6130539046214941054
   mipmapLimitGroupName: 
   pSDRemoveMatte: 0
   userData: 

@@ -12,6 +12,8 @@ namespace Grimward.Domain.Combat
         public Formation Formation { get; }
         public CombatantFactory Factory { get; }
         public bool IsNight { get; }
+        /// <summary>밤 명중 패널티 배율 (1 = 그대로, 횃불이 켜져 있으면 0.5).</summary>
+        public double NightPenaltyScale { get; internal set; } = 1.0;
         public int Round { get; internal set; }
         public Combatant CurrentActor { get; internal set; }
         public List<BattleEvent> Log { get; } = new List<BattleEvent>();

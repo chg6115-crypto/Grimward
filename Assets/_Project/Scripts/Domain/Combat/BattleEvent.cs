@@ -3,6 +3,8 @@ namespace Grimward.Domain.Combat
     public enum BattleEventKind
     {
         RoundStarted,
+        /// <summary>기습: Target 없음, Actor 없음. 메시지로 어느 쪽이 기습했는지.</summary>
+        Ambush,
         TurnStarted,
         SkillUsed,
         Missed,

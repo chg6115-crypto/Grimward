@@ -289,5 +289,201 @@ namespace Grimward.Tests
             Assert.That(hero.Injuries.Single().Severe, Is.False); // 중상 → 경상
             Assert.That(Expedition.IsUsableOutsideBattle(db.GetItem("key")), Is.False);
         }
+
+        // ── 밤 · 횃불 · 기습 (11-13) ─────────────────────────────
+
+        private static GameDatabase NightDb(System.Action<BalanceConfig> tweak = null)
+        {
+            var file = TestData.File();
+            var b = file.balance;
+            b.nightDetectPenalty = 0.2; b.torchDetectBonus = 0.1; b.torchNightPenaltyMultiplier = 0.5; b.torchMaxMinutes = 720;
+            b.ambushedBase = 0.3; b.ambushedPerPerception = 0.03; b.ambushedMin = 0.05; b.ambushedMax = 0.3; b.ambushedNightBonus = 0.1;
+            b.ambushSpeedBonus = 5; b.ambushRounds = 1;
+            foreach (var i in file.items) if (i.id == "key") i.torchMinutes = 240; // 테스트 데이터에 횃불이 없어 열쇠를 횃불로 쓴다
+            tweak?.Invoke(b);
+            return new GameDatabase(file);
+        }
+
+        private static Expedition At(GameDatabase d, int minute, int perception = 3, IRandomSource rng = null, BattleInventory bag = null)
+        {
+            var a = TestData.Hero(d, "swordsman"); a.Perception = perception;
+            return new Expedition(d, rng ?? new FakeRandom { DefaultDouble = 0.99 }, new[] { a }, bag ?? new BattleInventory(),
+                d.GetMap("test_map"), new GameTime(1, minute));
+        }
+
+        [Test]
+        public void Detect_NightPenalty_TorchBonus()
+        {
+            var d = NightDb();
+            var day = At(d, 12 * 60);
+            var night = At(d, 22 * 60, bag: Bag("key", 1));
+            double dayChance = day.DetectChance();
+            Assert.That(night.DetectChance(), Is.EqualTo(System.Math.Max(d.Balance.perceptionDetectMin, dayChance - 0.2)).Within(1e-9));
+            night.UseItem("key", null);                                   // 횃불
+            Assert.That(night.TorchLit, Is.True);
+            Assert.That(night.DetectChance(), Is.EqualTo(System.Math.Max(d.Balance.perceptionDetectMin, dayChance - 0.1)).Within(1e-9));
+        }
+
+        private static BattleInventory Bag(string id, int n) { var b = new BattleInventory(); b.Add(id, n); return b; }
+
+        [Test]
+        public void Torch_DurationStacksToMax()
+        {
+            var d = NightDb();
+            var x = At(d, 20 * 60, bag: Bag("key", 4));
+            x.UseItem("key", null); x.UseItem("key", null); x.UseItem("key", null);
+            Assert.That(x.TorchMinutesLeft, Is.EqualTo(720));
+            Assert.Throws<System.InvalidOperationException>(() => x.UseItem("key", null)); // 최대 12시간
+            Assert.That(x.Bag.Count("key"), Is.EqualTo(1));
+            x.MoveTo("n4");                                               // 60분 지나감
+            Assert.That(x.TorchMinutesLeft, Is.EqualTo(660));
+            Assert.That(x.NightPenaltyScale, Is.EqualTo(0.5));
+        }
+
+        [Test]
+        public void Ambush_DetectedNode_PartyAmbushes()
+        {
+            var d = NightDb(b => { b.perceptionDetectMin = 1; b.perceptionDetectMax = 1; }); // 무조건 탐지
+            var x = At(d, 12 * 60);
+            Assert.That(x.Map.Node("n2").Detected, Is.True);
+            x.MoveTo("n2");
+            var battle = x.BeginBattle();
+            Assert.That(battle.AmbushSide, Is.EqualTo(Grimward.Domain.Combat.BattleSide.Party));
+            Assert.That(battle.Log.Any(e => e.Kind == Grimward.Domain.Combat.BattleEventKind.Ambush), Is.True);
+        }
+
+        [Test]
+        public void Ambush_Undetected_ChanceFromPerceptionAndNight()
+        {
+            var d = NightDb();
+            Assert.That(At(d, 12 * 60, perception: 3).AmbushedChance(), Is.EqualTo(0.21).Within(1e-9));  // 30 − 9
+            Assert.That(At(d, 22 * 60, perception: 3).AmbushedChance(), Is.EqualTo(0.31).Within(1e-9));  // 밤 +10
+            var lit = At(d, 22 * 60, perception: 3, bag: Bag("key", 1)); lit.UseItem("key", null);
+            Assert.That(lit.AmbushedChance(), Is.EqualTo(0.26).Within(1e-9));                             // 횃불: 밤 가산 절반
+            Assert.That(At(d, 12 * 60, perception: 20).AmbushedChance(), Is.EqualTo(0.05).Within(1e-9)); // 최소
+
+            var sure = NightDb(b => { b.ambushedMin = 1; b.ambushedMax = 1; });                         // 무조건 기습당함
+            var x = At(sure, 12 * 60);                                    // 탐지 실패 (0.99)
+            x.MoveTo("n2");
+            Assert.That(x.BeginBattle().AmbushSide, Is.EqualTo(Grimward.Domain.Combat.BattleSide.Enemy));
+        }
+
+        [Test]
+        public void Ambush_None_OnRevisitOrNoAmbushMap()
+        {
+            var sure = NightDb(b => { b.ambushedMin = 1; b.ambushedMax = 1; });
+            var x = At(sure, 12 * 60);
+            x.MoveTo("n2");
+            var b1 = x.BeginBattle();
+            while (b1.Phase == BattlePhase.EnemyTurn) b1.RunEnemyTurn(); // 기습당해 적이 먼저
+            b1.Flee();                                                    // 도주 → n1으로 물러남
+            x.FinishBattle();
+            x.MoveTo("n2");                                               // 다시 감 (첫 방문 아님)
+            Assert.That(x.BeginBattle().AmbushSide, Is.Null);
+
+            var file = TestData.File();
+            file.balance.ambushedMin = 1; file.balance.ambushedMax = 1; file.balance.ambushSpeedBonus = 5;
+            file.maps[0].noAmbush = true;
+            var d2 = new GameDatabase(file);
+            var y = At(d2, 12 * 60);
+            y.MoveTo("n2");
+            Assert.That(y.BeginBattle().AmbushSide, Is.Null);
+        }
+
+        [Test]
+        public void NightAccuracy_HalvedByScale()
+        {
+            var c = TestData.Balance();
+            c.nightPartyAccuracyPenalty = 0.1; c.nightEnemyAccuracyBonus = 0.1;
+            double day = Grimward.Domain.Combat.CombatFormulas.HitChance(c, 8, 10, 0, Grimward.Domain.Combat.BattleSide.Party, false);
+            double lit = Grimward.Domain.Combat.CombatFormulas.HitChance(c, 8, 10, 0, Grimward.Domain.Combat.BattleSide.Party, true, 0.5);
+            Assert.That(day - lit, Is.EqualTo(0.05).Within(1e-9));
+        }
+
+        [Test]
+        public void Tutorial_FixedDetectAndAmbush_OverridesNoAmbush()
+        {
+            var file = TestData.File();
+            file.balance.ambushSpeedBonus = 5; file.balance.ambushRounds = 1;
+            file.maps[0].noAmbush = true;
+            var n2 = file.maps[0].nodes.First(n => n.id == "n2");
+            n2.forceDetect = true; n2.ambush = Expedition.AmbushParty;
+            var d = new GameDatabase(file);
+            CollectionAssert.IsEmpty(MapValidator.Validate(d.GetMap("test_map"), d));
+            var x = At(d, 12 * 60, perception: 0);                         // 지각 0, 판정 0.99여도
+            Assert.That(x.Map.Node("n2").Detected, Is.True);                // 무조건 탐지
+            x.MoveTo("n2");
+            var battle = x.BeginBattle();
+            Assert.That(battle.AmbushSide, Is.EqualTo(BattleSide.Party));   // 기습 없는 맵이어도 고정 기습
+            Assert.That(battle.Formation.Alive(BattleSide.Party).All(c => c.Effects.Sum(DataKeys.Stat.Speed) == 5), Is.True);
+        }
+
+        [Test]
+        public void FixedDetection_OnlyForcedNodesDetected()
+        {
+            var file = TestData.File();
+            file.balance.perceptionDetectMin = 1; file.balance.perceptionDetectMax = 1; // 판정하면 무조건 탐지
+            file.maps[0].fixedDetection = true;
+            file.maps[0].nodes.First(n => n.id == "n5").forceDetect = true;
+            var d = new GameDatabase(file);
+            var x = At(d, 12 * 60);
+            Assert.That(x.Map.Node("n2").Detected, Is.False);   // 지각 판정 안 함
+            x.MoveTo("n4"); x.MoveTo("n2");
+            Assert.That(x.Map.Node("n5").Detected, Is.True);    // 고정 탐지만
+        }
+
+        // ── 밤 랜덤 전투 (11-13) ─────────────────────────────
+
+        private static GameDatabase NightBattleDb(double chance)
+        {
+            return NightDb(b => b.nightRandomBattleChance = chance);
+        }
+
+        private static Expedition NightAt(GameDatabase d, int minute, BattleInventory bag = null)
+        {
+            d.GetMap("test_map").nightEncounter = "two";
+            return At(d, minute, bag: bag);
+        }
+
+        [Test]
+        public void NightBattle_OnRevisit_AtNight_StopsAndFights()
+        {
+            var x = NightAt(NightBattleDb(1.0), 22 * 60);
+            x.MoveTo("n4");                                       // 첫 방문: 없음
+            Assert.That(x.HasForcedBattle, Is.False);
+            x.MoveTo("n1");                                       // 시작 노드: 없음
+            Assert.That(x.HasForcedBattle, Is.False);
+            x.MoveTo("n4");                                       // 다시 방문 + 밤 → 습격
+            Assert.That(x.InRandomBattle, Is.True);
+            Assert.That(x.CanMoveTo("n1"), Is.False);
+            var b = x.BeginBattle();
+            Assert.That(b.AmbushSide, Is.Null);                   // 재방문은 기습 없음
+            while (b.Phase != BattlePhase.Ended)
+            {
+                if (b.Phase == BattlePhase.EnemyTurn) b.RunEnemyTurn();
+                else b.Flee();
+            }
+            x.FinishBattle();
+            Assert.That(x.InRandomBattle, Is.False);
+            Assert.That(x.Map.Node("n4").Completed, Is.True);     // 노드 상태는 그대로
+        }
+
+        [Test]
+        public void NightBattle_ChanceByTimeAndTorch()
+        {
+            var d = NightBattleDb(0.2);
+            Assert.That(NightAt(d, 12 * 60).NightBattleChance(), Is.EqualTo(0));
+            Assert.That(NightAt(d, 22 * 60).NightBattleChance(), Is.EqualTo(0.2).Within(1e-9));
+            var lit = NightAt(d, 22 * 60, Bag("key", 1)); lit.UseItem("key", null);
+            Assert.That(lit.NightBattleChance(), Is.EqualTo(0.1).Within(1e-9));
+        }
+
+        [Test]
+        public void NightBattle_NoneWithoutMapEncounter()
+        {
+            var x = At(NightBattleDb(1.0), 22 * 60);              // test_map 기본: nightEncounter 없음
+            x.MoveTo("n4"); x.MoveTo("n1"); x.MoveTo("n4");
+            Assert.That(x.HasForcedBattle, Is.False);
+        }
     }
 }

@@ -71,7 +71,7 @@ namespace Grimward.Domain.Combat
             var cfg = ctx.Config;
             double accBonus = level.accuracy + actor.Effects.Sum(DataKeys.Stat.Accuracy, target.Types);
             int dodge = target.Dodge + (int)target.Effects.Sum(DataKeys.Stat.Dodge);
-            double hit = CombatFormulas.HitChance(cfg, actor.Accuracy, dodge, accBonus, actor.Side, ctx.IsNight);
+            double hit = CombatFormulas.HitChance(cfg, actor.Accuracy, dodge, accBonus, actor.Side, ctx.IsNight, ctx.NightPenaltyScale);
             if (ctx.Random.NextDouble() >= hit)
             {
                 ctx.Emit(new BattleEvent(BattleEventKind.Missed, $"  {target.Name}에게 빗나감", actor, target));

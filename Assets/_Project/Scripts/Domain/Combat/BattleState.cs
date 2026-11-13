@@ -67,6 +67,34 @@ namespace Grimward.Domain.Combat
             return new BattleState(db, random, heroes, enemies, isNight, inventory, factory);
         }
 
+        /// <summary>밤 명중 패널티 배율 (횃불). 전투 시작 전에 정한다.</summary>
+        public void SetNightPenaltyScale(double scale)
+        {
+            if (Phase != BattlePhase.NotStarted) throw new InvalidOperationException("이미 시작했습니다.");
+            ctx.NightPenaltyScale = scale;
+        }
+
+        /// <summary>기습한 쪽 (없으면 null).</summary>
+        public BattleSide? AmbushSide { get; private set; }
+
+        /// <summary>
+        /// 기습: 기습한 쪽 전원에게 속도 +speed (rounds라운드 = 자기 차례가 rounds번 끝날 때까지). 전투 시작 전에 부른다.
+        /// </summary>
+        public void ApplyAmbush(BattleSide side, int speed, int rounds)
+        {
+            if (Phase != BattlePhase.NotStarted) throw new InvalidOperationException("이미 시작했습니다.");
+            AmbushSide = side;
+            var def = new EffectDefinition
+            {
+                kind = DataKeys.EffectKind.Stat, stat = DataKeys.Stat.Speed, value = speed,
+                duration = Math.Max(1, rounds), target = DataKeys.EffectTarget.Target
+            };
+            foreach (var c in ctx.Formation.Alive(side).ToList())
+                c.Effects.Apply(new ActiveEffect("ambush", "기습", def), false);
+            ctx.Emit(new BattleEvent(BattleEventKind.Ambush,
+                side == BattleSide.Party ? $"기습! 파티가 먼저 움직인다 (속도 +{speed})" : $"기습당했다! 적이 먼저 움직인다 (속도 +{speed})"));
+        }
+
         public void Start()
         {
             if (Phase != BattlePhase.NotStarted) throw new InvalidOperationException("이미 시작했습니다.");
