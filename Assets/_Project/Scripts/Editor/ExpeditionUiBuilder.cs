@@ -328,13 +328,23 @@ namespace Grimward.EditorTools
 
             // 마을로 귀환 (왼쪽 아래, 출발점에서만)
             var ret = UiBuild.Button("Btn_MapReturn", window, "마을로 귀환", 28, new Vector2(.015f, .025f), new Vector2(.2f, .115f));
+            // 출구로 (그 옆): 지나갈 수 있는 길로 출발점까지 한 칸씩, 밤 습격이 나면 멈춤. 귀환은 출구에서 따로
+            var autoRet = UiBuild.Button("Btn_MapExit", window, "출구로", 28, new Vector2(.21f, .025f), new Vector2(.395f, .115f));
 
             var zoom = area.gameObject.AddComponent<MapZoom>();
             zoom.Assign(scroll, slider, zoomIn, zoomOut);
 
             var view = root.gameObject.AddComponent<MapScreen>();
             view.Assign(dimButton, close, region, travel, travelBtn, tiles.ToArray(), scroll, zoom);
-            view.AssignReturn(ret);
+            view.AssignReturn(ret, autoRet);
+            // 이동 연출 핀: Grid_Hex 맨 위 (칸 위의 현재 위치 아이콘과 같은 그림·크기)
+            var pin = UiBuild.Image("Img_TravelPin", grid, new Vector2(.5f, .5f), new Vector2(.5f, .5f), Color.white);
+            pin.sprite = MapArt("map_player.png");
+            pin.preserveAspect = true;
+            pin.raycastTarget = false;
+            pin.rectTransform.sizeDelta = Vector2.one * (HexWidth * 512f / 422f * .28f);
+            pin.gameObject.SetActive(false);
+            view.AssignPin(pin.rectTransform);
             view.AssignSprites(MapArt("map_icon_camp.png"), MapArt("map_icon_battle.png"), MapArt("map_icon_boss.png"),
                 MapArt("map_icon_gather.png"), MapArt("map_icon_investigate.png"), MapArt("map_icon_treasure.png"),
                 MapArt("map_road_solid.png"), MapArt("map_road_dashed.png"));

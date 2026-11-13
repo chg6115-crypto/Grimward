@@ -485,5 +485,50 @@ namespace Grimward.Tests
             x.MoveTo("n4"); x.MoveTo("n1"); x.MoveTo("n4");
             Assert.That(x.HasForcedBattle, Is.False);
         }
+
+        // ── 자동 귀환 (11-13) ─────────────────────────────
+
+        [Test]
+        public void GoToExit_WalksBackToStart_NoTownReturn()
+        {
+            var x = NewExpedition();
+            x.MoveTo("n4"); x.MoveTo("n2"); x.Map.CompleteEvent("n2", 0);
+            Assert.That(x.CanGoToExit, Is.True);
+            var eta = x.ReturnEstimate();
+            x.GoToExit();
+            Assert.That(x.Map.Current.IsStart, Is.True);
+            Assert.That(x.Phase, Is.EqualTo(ExpeditionPhase.Exploring));   // 귀환은 따로
+            Assert.That(x.Time.MinuteOfDay, Is.EqualTo(eta.MinuteOfDay));
+            Assert.That(x.CanGoToExit, Is.False);
+            x.ReturnToTown();
+            Assert.That(x.End, Is.EqualTo(ExpeditionEnd.Returned));
+        }
+
+        [Test]
+        public void GoToExit_StopsOnNightRaid()
+        {
+            // s ─ a ─ b 일자 맵. 18:00 출발 → a(19:00) → b(20:00, 밤). 자동 귀환하면 a 재방문(밤)에서 습격으로 멈춘다.
+            var d = NightBattleDb(1.0);
+            var map = new MapDefinition
+            {
+                id = "line", name = "일자", radius = 2, startNode = "s", nightEncounter = "two",
+                nodes = new[]
+                {
+                    new MapNodeDefinition { id = "s", name = "입구", q = 0, r = 0 },
+                    new MapNodeDefinition { id = "a", name = "가", q = 1, r = 0 },
+                    new MapNodeDefinition { id = "b", name = "나", q = 2, r = 0 },
+                },
+                edges = new[] { new MapEdgeDefinition { a = "s", b = "a" }, new MapEdgeDefinition { a = "a", b = "b" } }
+            };
+            var x = new Expedition(d, new FakeRandom { DefaultDouble = 0.99 }, new[] { TestData.Hero(d, "swordsman") },
+                new BattleInventory(), map, new GameTime(1, 18 * 60));
+            x.MoveTo("a"); x.MoveTo("b");
+            Assert.That(x.IsNight, Is.True);
+            Assert.That(x.GoToExit().Last().To.Id, Is.EqualTo("a"));
+            Assert.That(x.Map.Current.Id, Is.EqualTo("a"));
+            Assert.That(x.InRandomBattle, Is.True);
+            Assert.That(x.CanGoToExit, Is.False);            // 전투를 끝내야 다시 누를 수 있다
+            Assert.That(x.Phase, Is.EqualTo(ExpeditionPhase.Exploring));
+        }
     }
 }

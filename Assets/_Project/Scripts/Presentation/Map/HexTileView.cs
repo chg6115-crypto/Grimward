@@ -43,6 +43,9 @@ namespace Grimward.Presentation.Map
             this.nameText = nameText; this.fog = fog;
         }
 
+        /// <summary>현재 위치 아이콘만 끄고 켠다 (이동 연출 중에는 움직이는 핀이 대신한다).</summary>
+        public void SetPlayerVisible(bool visible) => player.enabled = visible;
+
         /// <summary>노드 칸(채움·테두리) 크기 배율. 칸 사이 간격을 정한다 (1 = 이웃과 거의 붙음).</summary>
         public void SetNodeScale(float scale)
         {

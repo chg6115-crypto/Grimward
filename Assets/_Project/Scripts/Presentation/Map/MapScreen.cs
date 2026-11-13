@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using Grimward.Domain.Core;
 using Grimward.Domain.Data;
@@ -28,12 +29,20 @@ namespace Grimward.Presentation.Map
         [SerializeField] private Button travelButton;
         [Tooltip("마을로 귀환 (창 왼쪽 아래). 출발점에서만 누를 수 있다")]
         [SerializeField] private Button returnButton;
+        [Tooltip("출구로 (마을로 귀환 옆): 출발점까지 이동만. 귀환은 출구에서 따로")]
+        [SerializeField] private Button autoReturnButton;
 
         [Header("지도")]
         [SerializeField] private HexTileView[] tiles;
         [Tooltip("지도 드래그 영역 (Panel_MapArea의 ScrollRect)")]
         [SerializeField] private ScrollRect scroll;
         [SerializeField] private MapZoom zoom;
+        [Tooltip("이동 연출용 핀 (Grid_Hex 맨 위). 지도에서 칸마다 움직인 뒤 지도가 닫힌다")]
+        [SerializeField] private RectTransform travelPin;
+        [Tooltip("핀이 한 칸 가는 시간(초)")]
+        [SerializeField] private float pinStepSeconds = 0.35f;
+        [Tooltip("도착 후 지도가 닫히기까지 대기(초)")]
+        [SerializeField] private float pinArriveHold = 0.25f;
         [SerializeField] private float followSeconds = 0.35f;
         [Tooltip("노드 칸 크기 배율 = 칸 사이 간격. 0.96 → 간격 약 12px, 0.85 → 약 36px(3배), 1 → 거의 붙음 (칸 간격 220px 기준)")]
         [SerializeField, Range(0.6f, 1f)] private float nodeScale = 0.85f;
@@ -79,6 +88,7 @@ namespace Grimward.Presentation.Map
         public event Action<string> TravelRequested;
         public event Action Closed;
         public event Action ReturnRequested;
+        public event Action ExitRequested;
 
         public void Assign(Button dim, Button close, TMP_Text region, TMP_Text travel, Button travelBtn,
             HexTileView[] tileViews, ScrollRect scrollRect, MapZoom mapZoom)
@@ -87,7 +97,12 @@ namespace Grimward.Presentation.Map
             tiles = tileViews; scroll = scrollRect; zoom = mapZoom;
         }
 
-        public void AssignReturn(Button button) => returnButton = button;
+        public void AssignPin(RectTransform pin) => travelPin = pin;
+
+        public void AssignReturn(Button button, Button autoReturn = null)
+        {
+            returnButton = button; autoReturnButton = autoReturn;
+        }
 
         public void AssignSprites(Sprite start, Sprite battle, Sprite boss, Sprite gather, Sprite investigate, Sprite treasure,
             Sprite solid, Sprite dashed)
@@ -99,10 +114,12 @@ namespace Grimward.Presentation.Map
         private void Awake()
         {
             foreach (var t in tiles) { t.Clicked += OnTileClicked; t.SetNodeScale(nodeScale); }
-            dimButton.onClick.AddListener(Close);
-            closeButton.onClick.AddListener(Close);
-            travelButton.onClick.AddListener(() => { if (selectedId != null) TravelRequested?.Invoke(selectedId); });
-            if (returnButton != null) returnButton.onClick.AddListener(() => { if (expedition != null && expedition.CanReturn) ReturnRequested?.Invoke(); });
+            dimButton.onClick.AddListener(() => { if (!traveling) Close(); });
+            closeButton.onClick.AddListener(() => { if (!traveling) Close(); });
+            travelButton.onClick.AddListener(() => { if (selectedId != null && !traveling) TravelRequested?.Invoke(selectedId); });
+            if (travelPin != null) travelPin.gameObject.SetActive(false);
+            if (returnButton != null) returnButton.onClick.AddListener(() => { if (!traveling && expedition != null && expedition.CanReturn) ReturnRequested?.Invoke(); });
+            if (autoReturnButton != null) autoReturnButton.onClick.AddListener(() => { if (!traveling && expedition != null && expedition.CanGoToExit) ExitRequested?.Invoke(); });
         }
 
         public void Bind(Expedition x, GameDatabase database)
@@ -114,6 +131,8 @@ namespace Grimward.Presentation.Map
         public void Open()
         {
             if (expedition == null) return;
+            traveling = false;
+            if (travelPin != null) travelPin.gameObject.SetActive(false);
             selectedId = null;
             gameObject.SetActive(true);
             Refresh();
@@ -130,7 +149,77 @@ namespace Grimward.Presentation.Map
         private void Update()
         {
             var kb = Keyboard.current;
-            if (kb != null && kb.escapeKey.wasPressedThisFrame) Close();
+            if (kb != null && kb.escapeKey.wasPressedThisFrame && !traveling) Close();
+        }
+
+        // ── 이동 연출 ─────────────────────────────
+
+        private bool traveling;
+        public bool IsTraveling => traveling;
+
+        /// <summary>
+        /// 지도 위에서 핀이 from → path 순서로 한 칸씩 움직인 뒤 지도를 닫고 done을 부른다.
+        /// 이동 규칙은 이미 Domain에서 끝난 상태(시간·발견·습격)이고, 화면은 연출만 한다. 연출 중에는 입력을 막는다.
+        /// 핀이 없거나 지도가 닫혀 있으면 바로 done.
+        /// </summary>
+        public void PlayTravel(HexCoord from, IReadOnlyList<HexCoord> path, Action done)
+        {
+            if (travelPin == null || !IsOpen || path == null || path.Count == 0)
+            {
+                Close();
+                done?.Invoke();
+                return;
+            }
+            StartCoroutine(TravelRoutine(from, path, done));
+        }
+
+        private System.Collections.IEnumerator TravelRoutine(HexCoord from, IReadOnlyList<HexCoord> path, Action done)
+        {
+            traveling = true;
+            selectedId = null;
+            travelButton.interactable = false;
+            var start = Tile(from);
+            if (start != null) start.SetPlayerVisible(false);
+            travelPin.gameObject.SetActive(true);
+            travelPin.SetAsLastSibling();
+            travelPin.anchoredPosition = Pos(from);
+            var at = from;
+            foreach (var next in path)
+            {
+                Vector2 a = Pos(at), b = Pos(next);
+                for (float t = 0; t < pinStepSeconds; t += Time.deltaTime)
+                {
+                    float k = Mathf.SmoothStep(0, 1, t / pinStepSeconds);
+                    travelPin.anchoredPosition = Vector2.Lerp(a, b, k);
+                    Follow(travelPin.anchoredPosition);
+                    yield return null;
+                }
+                travelPin.anchoredPosition = b;
+                at = next;
+            }
+            yield return new WaitForSeconds(pinArriveHold);
+            travelPin.gameObject.SetActive(false);
+            traveling = false;
+            Refresh();
+            Close();
+            done?.Invoke();
+        }
+
+        private HexTileView Tile(HexCoord c) => tiles.FirstOrDefault(t => t.Q == c.Q && t.R == c.R);
+
+        private Vector2 Pos(HexCoord c)
+        {
+            var tile = Tile(c);
+            return tile != null ? ((RectTransform)tile.transform).anchoredPosition : Vector2.zero;
+        }
+
+        /// <summary>핀이 창 가운데 쪽에 머물도록 지도를 따라 움직인다.</summary>
+        private void Follow(Vector2 pinPos)
+        {
+            if (scroll == null || scroll.content == null) return;
+            scroll.StopMovement();
+            scroll.content.anchoredPosition = Vector2.Lerp(scroll.content.anchoredPosition,
+                -pinPos * scroll.content.localScale.x, 0.2f);
         }
 
         /// <summary>현재 위치 칸이 창 가운데 오도록 지도를 옮긴다. 범위는 ScrollRect(Clamped)가 자른다.</summary>
@@ -259,6 +348,7 @@ namespace Grimward.Presentation.Map
             else travelText.text = "<size=80%><color=#8a8a80>금색 테두리 칸을 눌러 목적지를 고른다</color></size>";
             travelButton.interactable = selectedId != null;
             if (returnButton != null) returnButton.interactable = x.CanReturn;
+            if (autoReturnButton != null) autoReturnButton.interactable = x.CanGoToExit;
         }
 
         /// <summary>14시 · 14시 30분 · (다음 날) 02시.</summary>
@@ -278,7 +368,7 @@ namespace Grimward.Presentation.Map
         private void OnTileClicked(HexTileView tile)
         {
             var node = expedition?.Map.Nodes.FirstOrDefault(n => n.Coord.Q == tile.Q && n.Coord.R == tile.R);
-            if (node == null || !expedition.CanTravelTo(node.Id)) return;
+            if (traveling || node == null || !expedition.CanTravelTo(node.Id)) return;
             // 이미 고른 칸을 한 번 더 누르면 이동 (모바일: 탭 → 정보, 다시 탭 → 실행)
             if (selectedId == node.Id) { TravelRequested?.Invoke(node.Id); return; }
             selectedId = node.Id;

@@ -58,15 +58,16 @@ namespace Grimward.Presentation.Common
                 initialized = true;
                 return;
             }
+            // 시간은 앞으로만 흐르므로 시계 방향(각도 감소)으로, 필요한 만큼만 돈다 (0~360° 미만).
+            float from = hand.localEulerAngles.z;
+            float delta = Mathf.Repeat(from - target, 360f);
+            if (delta < 0.01f) { shownAngle = target; return; }   // 시각이 그대로면 움직이지 않는다
             if (turning != null) StopCoroutine(turning);
-            turning = StartCoroutine(Turn(target));
+            turning = StartCoroutine(Turn(from, from - delta));
         }
 
-        private IEnumerator Turn(float target)
+        private IEnumerator Turn(float from, float target)
         {
-            // 시간은 앞으로만 흐르므로 시계 방향(각도 감소)으로만 돈다.
-            float from = shownAngle;
-            while (target > from) target -= 360f;
             for (float t = 0; t < turnSeconds; t += Time.deltaTime)
             {
                 float k = Mathf.SmoothStep(0, 1, t / turnSeconds);

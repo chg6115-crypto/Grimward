@@ -445,6 +445,28 @@ namespace Grimward.Domain.Map
             log.Add($"{Time} 마을로 귀환");
         }
 
+        /// <summary>「출구로」 가능: 시작 노드가 아니고, 강제 전투가 없고, 지나갈 수 있는 노드만으로 시작 노드까지 갈 수 있다.</summary>
+        public bool CanGoToExit =>
+            Phase == ExpeditionPhase.Exploring && !HasForcedBattle && Map.Current != Map.Start && Map.PathToStart() != null;
+
+        /// <summary>
+        /// 「출구로」 (11-13): PathToStart를 따라 시작 노드(출구)까지 한 칸씩 이동한다(칸마다 시간 · 밤 랜덤 전투 판정).
+        /// 마을 귀환은 하지 않는다 — 출구에서 「마을로 귀환」을 따로 눌러야 한다.
+        /// 밤 랜덤 전투가 걸리면 그 칸에서 멈춘다 — 이긴 뒤에는 다시 눌러야 한다. 지나간 칸들을 돌려준다 (화면의 핀 이동용).
+        /// </summary>
+        public List<MoveResult> GoToExit()
+        {
+            var steps = new List<MoveResult>();
+            if (!CanGoToExit) throw new InvalidOperationException("지금은 출구로 갈 수 없습니다.");
+            log.Add($"{Time} 출구로 출발");
+            foreach (var step in Map.PathToStart())
+            {
+                steps.Add(MoveTo(step.Id));
+                if (HasForcedBattle) { log.Add($"{Time} 출구로 가던 중 습격 — 멈춤"); return steps; }
+            }
+            return steps;
+        }
+
         // ── 표시용 ─────────────────────────────
 
         public static string NodeLabel(MapNodeState n) =>

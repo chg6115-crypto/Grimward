@@ -67,6 +67,7 @@ namespace Grimward.Presentation.Bootstrap
             stage.OutsideItemInstant = Expedition.IsInstantOutsideBattle;
             mapScreen.TravelRequested += OnTravel;
             mapScreen.ReturnRequested += OnReturn;
+            mapScreen.ExitRequested += OnGoToExit;
             NewExpedition();
         }
 
@@ -154,11 +155,28 @@ namespace Grimward.Presentation.Bootstrap
 
         private void OnTravel(string nodeId)
         {
-            if (!expedition.CanTravelTo(nodeId)) return;
-            mapScreen.Close();
-            expedition.TravelTo(nodeId);
-            ShowStage();          // 2단계: 걷기 연출. 지금은 무대를 바로 바꾼다
-            AfterNodeChanged();
+            if (!expedition.CanTravelTo(nodeId) || mapScreen.IsTraveling) return;
+            var from = expedition.Map.Current.Coord;
+            var steps = expedition.TravelTo(nodeId);
+            // 지도에서 핀이 칸마다 움직인 뒤 지도가 닫히고 무대가 바뀐다 (무대 걷기 연출은 2단계)
+            mapScreen.PlayTravel(from, steps.Select(r => r.To.Coord).ToList(), () =>
+            {
+                ShowStage();
+                AfterNodeChanged();
+            });
+        }
+
+        /// <summary>출구로: 출발점까지 이동만 (도착하면 지도가 다시 열리고 「마을로 귀환」을 따로 누른다). 밤 습격이 나면 그 칸에서 전투.</summary>
+        private void OnGoToExit()
+        {
+            if (!expedition.CanGoToExit || mapScreen.IsTraveling) return;
+            var from = expedition.Map.Current.Coord;
+            var steps = expedition.GoToExit();
+            mapScreen.PlayTravel(from, steps.Select(r => r.To.Coord).ToList(), () =>
+            {
+                if (expedition.Phase != ExpeditionPhase.Ended) ShowStage();
+                AfterNodeChanged();
+            });
         }
 
         private void OnReturn()
