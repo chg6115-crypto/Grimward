@@ -25,6 +25,12 @@ namespace Grimward.Domain.Map
         /// <summary>이벤트 종류가 보이는가: 방문했거나 지각 탐지에 성공.</summary>
         public bool EventsRevealed => Visited || Detected;
         public bool HasEvents => Events.Count > 0;
+        /// <summary>
+        /// 지나갈 수 있는 노드: 방문했고 남은 전투가 없다. 채집·조사가 남아 있어도(지나친 골동품) 지나갈 수 있다.
+        /// 여러 칸 이동·자동 귀환의 중간 노드 조건.
+        /// </summary>
+        public bool Passable => Visited && !PendingEvents().Any(p =>
+            p.ev.kind == DataKeys.NodeEvent.Battle || p.ev.kind == DataKeys.NodeEvent.Boss);
 
         internal MapNodeState(MapNodeDefinition def, bool isStart)
         {
@@ -201,7 +207,7 @@ namespace Grimward.Domain.Map
 
         /// <summary>
         /// 여러 칸 한 번에 이동할 경로: 현재 노드에서 목표까지 이동 시간이 가장 짧은 경로.
-        /// 지나가는 중간 노드는 모두 완료한 노드여야 한다(미완료 노드를 그냥 지나칠 수 없음). 목표는 발견한 노드면 된다.
+        /// 지나가는 중간 노드는 지나갈 수 있는 노드(Passable: 방문했고 남은 전투 없음)여야 한다. 목표는 발견한 노드면 된다.
         /// 결과는 현재 다음 노드부터 목표까지. 갈 수 없으면 null.
         /// </summary>
         public List<MapNodeState> FindRoute(string targetId)
@@ -216,7 +222,7 @@ namespace Grimward.Domain.Map
                 var n = open.OrderBy(x => dist[x.Id]).First();
                 open.Remove(n);
                 if (n == target) break;
-                if (n != Current && !n.Completed) continue; // 미완료 노드에서는 더 나아가지 않는다 (목표일 때만 도착)
+                if (n != Current && !n.Passable) continue; // 전투가 남았거나 안 가 본 노드에서는 더 나아가지 않는다 (목표일 때만 도착)
                 foreach (var e in edges.Where(x => (x.A == n.Id || x.B == n.Id) && x.Discovered))
                 {
                     var nb = nodes[e.Other(n.Id)];
@@ -248,7 +254,7 @@ namespace Grimward.Domain.Map
         }
 
         /// <summary>
-        /// 자동 귀환 경로: 현재 노드에서 시작 노드까지, 완료한 노드만 지나는 최단 경로(BFS, 가중치 없음).
+        /// 자동 귀환 경로: 현재 노드에서 시작 노드까지, 지나갈 수 있는 노드(Passable)만 지나는 최단 경로(BFS, 가중치 없음).
         /// 현재 노드는 미완료여도 된다(도주 직후 등). 경로가 없으면 null. 결과는 현재 다음 노드부터 시작 노드까지.
         /// </summary>
         public List<MapNodeState> PathToStart()
@@ -262,7 +268,7 @@ namespace Grimward.Domain.Map
                 if (n == Start) break;
                 foreach (var nb in Neighbors(n))
                 {
-                    if (prev.ContainsKey(nb.Id) || !nb.Completed) continue;
+                    if (prev.ContainsKey(nb.Id) || !nb.Passable) continue;
                     prev[nb.Id] = n.Id;
                     q.Enqueue(nb);
                 }

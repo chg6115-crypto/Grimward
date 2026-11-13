@@ -14,6 +14,7 @@ namespace Grimward.Presentation.Battle
 {
     /// <summary>
     /// 전투 화면 컨트롤러 (Panel_Battle). Hierarchy에 만들어 둔 뷰들을 연결해 BattleState를 표시·조작한다.
+    /// 출정 중에는 「탐험 무대」로도 쓴다: 전투가 아닐 때는 파티 · 가운데 골동품·채집물 · 「지도」 버튼만 보이고 기술 칸은 회색.
     /// 위: 진형 (왼쪽 플레이어 4 3 2 1 | 1 2 3 4 몬스터) · 좌하단: 모험가 패널 · 우하단: 가방 6×2 + 전투 기록 / 상세 정보.
     /// 기술 버튼에 포인터를 올리면(또는 기술을 고르면) 툴팁.
     /// 규칙 계산은 하지 않는다.
@@ -46,6 +47,21 @@ namespace Grimward.Presentation.Battle
         [SerializeField] private Button restartButton;
         [Tooltip("24시간 시계 (Panel_Top 왼쪽). 비어 있으면 표시하지 않는다")]
         [SerializeField] private ClockView clock;
+
+        [Header("탐험 무대 (출정 중)")]
+        [Tooltip("Panel_Top의 「지도」 버튼. 전투 밖에서만 보인다")]
+        [SerializeField] private Button mapButton;
+        [Tooltip("무대 가운데 골동품·채집물 (누르면 상호작용 창)")]
+        [SerializeField] private Button curioButton;
+        [SerializeField] private Image curioImage;
+        [SerializeField] private TMP_Text curioLabel;
+        [Tooltip("골동품 상호작용 창")]
+        [SerializeField] private Map.CurioWindow curioWindow;
+        [Tooltip("무대 가운데 큰 글자 (승리 · 도주 · 전멸)")]
+        [SerializeField] private TMP_Text bannerText;
+        [SerializeField] private float bannerSeconds = 1.1f;
+        [Tooltip("전투 기록 칸 (개발용). 평소 꺼 두고 넘패드 0으로 켜고 끈다")]
+        [SerializeField] private GameObject logPanel;
 
         [Header("연출")]
         [SerializeField] private float enemyTurnDelay = 0.6f;
@@ -89,6 +105,25 @@ namespace Grimward.Presentation.Battle
         private readonly Dictionary<CombatantSlotView, (int count, float time)> textStack =
             new Dictionary<CombatantSlotView, (int, float)>();
 
+        // 탐험 무대
+        private bool exploring;
+        private bool expeditionBattle;      // 출정 전투: 결과창 대신 큰 글자 후 onFinished
+        private Action onFinished;
+        private bool finishing;
+        private readonly List<Combatant> exploreParty = new List<Combatant>();
+        private Domain.Combat.BattleInventory exploreBag;
+        private string placeName;
+
+        public event Action MapRequested;
+        public event Action CurioClicked;
+        /// <summary>전투 밖 자리 바꾸기 요청 (칸 번호 둘, 바로 옆).</summary>
+        public event Action<int, int> PartySwapRequested;
+        /// <summary>전투 밖 아이템 사용 요청 (아이템 ID, 대상 칸 번호).</summary>
+        public event Action<string, int> ItemUseRequested;
+        /// <summary>전투 밖에서 쓸 수 있는 아이템 판정 (출정 규칙). 비어 있으면 아이템을 쓸 수 없다.</summary>
+        public Func<ItemDefinition, bool> OutsideItemFilter { get; set; }
+        public Map.CurioWindow Curio => curioWindow;
+
         /// <summary>에디터 UI 빌더 전용.</summary>
         public void Assign(TMP_Text roundText, TMP_Text turnText, Button fleeButton, TMP_Text infoText,
             CombatantSlotView[] partySlots, CombatantSlotView[] enemySlots, HeroPanelView heroPanel,
@@ -109,6 +144,14 @@ namespace Grimward.Presentation.Battle
         }
 
         public bool HasEffects => floatingText != null;
+
+        /// <summary>에디터 UI 빌더 전용: 탐험 무대 요소.</summary>
+        public void AssignStage(Button map, Button curio, Image curioImg, TMP_Text curioText, Map.CurioWindow window,
+            TMP_Text banner, GameObject log)
+        {
+            mapButton = map; curioButton = curio; curioImage = curioImg; curioLabel = curioText; curioWindow = window;
+            bannerText = banner; logPanel = log;
+        }
 
         private void Awake()
         {
@@ -148,6 +191,13 @@ namespace Grimward.Presentation.Battle
                 });
             UpdateSpeedLabel();
             restartButton.onClick.AddListener(() => onRestart?.Invoke());
+            if (mapButton != null) mapButton.onClick.AddListener(() => { if (exploring) MapRequested?.Invoke(); });
+            if (curioButton != null) curioButton.onClick.AddListener(() => { if (exploring) CurioClicked?.Invoke(); });
+            if (logPanel != null) logPanel.SetActive(false);   // 개발용: 넘패드 0
+            if (bannerText != null) bannerText.gameObject.SetActive(false);
+            if (curioWindow != null) curioWindow.Hide();
+            SetCurio(null, null);
+            SetStageButtons();
         }
 
         public void AssignClock(ClockView clockView) => clock = clockView;
@@ -168,12 +218,150 @@ namespace Grimward.Presentation.Battle
                 if (label != null) label.text = continueLabel;
             }
             StopAllCoroutines();
+            exploring = false; expeditionBattle = false; onFinished = null; finishing = false;
+            if (bannerText != null) bannerText.gameObject.SetActive(false);
             battle = battleState; db = database; onRestart = restart; sprites = spriteCatalog;
             shownHero = null; inspected = null; hoveredButton = -1; selectedSkill = -1; selectedItem = null; enemyRunning = false;
             playing = false; textStack.Clear(); autoTimer = 0f;
             resultPanel.SetActive(false);
             infoText.text = "";
+            SetStageButtons();
             Refresh();
+        }
+
+        // ── 탐험 무대 ─────────────────────────────
+
+        /// <summary>
+        /// 출정 전투: 무대(골동품 포함)는 그대로 두고 몬스터가 오른쪽에 나온다.
+        /// 끝나면 결과창 없이 가운데에 「승리 · 도주 · 전멸」을 잠깐 띄운 뒤 onFinished를 부른다.
+        /// </summary>
+        public void ShowBattle(BattleState battleState, GameDatabase database, Data.SpriteCatalog spriteCatalog,
+            Domain.Core.GameTime time, Action finished)
+        {
+            Show(battleState, database, null, spriteCatalog, time);
+            expeditionBattle = true;
+            onFinished = finished;
+            if (curioWindow != null) curioWindow.Hide();
+            SetStageButtons();
+        }
+
+        /// <summary>전투가 아닐 때의 무대: 파티(목록 순서 = 칸 순서) · 가방 · 장소 이름 · 「지도」 버튼. 기술 칸은 회색.</summary>
+        public void ShowExplore(IReadOnlyList<Domain.Units.Adventurer> party, Domain.Combat.BattleInventory inventory,
+            GameDatabase database, Data.SpriteCatalog spriteCatalog, Domain.Core.GameTime time, string place, bool animateClock = true)
+        {
+            StopAllCoroutines();
+            battle = null; db = database; sprites = spriteCatalog;
+            exploring = true; expeditionBattle = false; onFinished = null; finishing = false; enemyRunning = false; playing = false;
+            exploreBag = inventory; placeName = place;
+            var factory = new CombatantFactory(database);
+            var keep = shownHero != null ? shownHero.Name : null;
+            exploreParty.Clear();
+            foreach (var a in party.Where(a => !a.IsDead)) exploreParty.Add(factory.FromAdventurer(a));
+            shownHero = exploreParty.FirstOrDefault(c => c.Name == keep) ?? exploreParty.FirstOrDefault();
+            inspected = null; hoveredButton = -1; selectedSkill = -1; selectedItem = null;
+            if (clock != null)
+            {
+                clock.gameObject.SetActive(time != null);
+                if (time != null) clock.Set(time, database.Balance, animateClock);
+            }
+            resultPanel.SetActive(false);
+            if (bannerText != null) bannerText.gameObject.SetActive(false);
+            infoText.text = "";
+            SetStageButtons();
+            Refresh();
+        }
+
+        /// <summary>무대 가운데 물건. sprite가 null이면 숨긴다. 전투 중에도 그대로 보인다.</summary>
+        public void SetCurio(Sprite sprite, string label)
+        {
+            if (curioButton == null) return;
+            curioButton.gameObject.SetActive(sprite != null);
+            if (sprite == null) return;
+            if (curioImage != null) { curioImage.sprite = sprite; curioImage.preserveAspect = true; }
+            if (curioLabel != null) curioLabel.text = label ?? "";
+        }
+
+        /// <summary>출정 결과 (귀환·전멸). 버튼을 누르면 action.</summary>
+        public void ShowExpeditionResult(string text, string buttonLabel, Action action)
+        {
+            onRestart = action;
+            var label = restartButton.GetComponentInChildren<TMP_Text>(true);
+            if (label != null) label.text = buttonLabel;
+            resultText.text = text;
+            resultPanel.SetActive(true);
+            exploring = false;
+            SetStageButtons();
+        }
+
+        /// <summary>무대 아래 안내 한 줄 (아이템 사용 결과 등).</summary>
+        public void SetInfo(string text) => infoText.text = text ?? "";
+
+        public void SetMapButtonInteractable(bool on)
+        {
+            if (mapButton != null) mapButton.interactable = on;
+        }
+
+        private void SetStageButtons()
+        {
+            if (mapButton != null) mapButton.gameObject.SetActive(exploring);
+            fleeButton.gameObject.SetActive(!exploring);
+            if (curioButton != null) curioButton.interactable = exploring;
+        }
+
+        private IEnumerator FinishBanner()
+        {
+            finishing = true;
+            string text = battle.Outcome == BattleOutcome.Victory ? "승리"
+                : battle.Outcome == BattleOutcome.Defeat ? "<color=#e55>전멸</color>" : "도주";
+            if (bannerText != null)
+            {
+                bannerText.text = text;
+                bannerText.gameObject.SetActive(true);
+            }
+            yield return new WaitForSeconds(bannerSeconds / speed);
+            if (bannerText != null) bannerText.gameObject.SetActive(false);
+            var done = onFinished;
+            onFinished = null;
+            done?.Invoke();
+        }
+
+        private void RefreshExplore()
+        {
+            if (shownHero == null || !exploreParty.Contains(shownHero)) shownHero = exploreParty.FirstOrDefault();
+            roundText.text = "";
+            turnText.text = placeName ?? "";
+            BindExploreSlots();
+            heroPanel.Bind(shownHero, db, null, false, selectedSkill, exploreParty.IndexOf(shownHero) + 1,
+                canMoveOutside: exploreParty.Count > 1);
+            bool showInfo = inspected != null;
+            infoPanel.gameObject.SetActive(showInfo);
+            bagLogGroup.SetActive(!showInfo);
+            if (showInfo) infoPanel.Bind(inspected, db, exploreParty.IndexOf(inspected) + 1);
+            if (exploreBag != null) bag.Bind(exploreBag, db, OutsideItemFilter != null, selectedItem, OutsideItemFilter);
+            if (logText != null) logText.text = "";
+            UpdateTooltip();
+        }
+
+        private void BindExploreSlots()
+        {
+            for (int i = 0; i < partySlots.Length; i++)
+            {
+                var c = i < exploreParty.Count ? exploreParty[i] : null;
+                partySlots[i].gameObject.SetActive(true);
+                partySlots[i].SetSpan(partySlots[i].BaseAnchorMin, partySlots[i].BaseAnchorMax, 1);
+                var h = CombatantSlotView.Highlight.None;
+                if (c != null)
+                {
+                    int from = exploreParty.IndexOf(shownHero);
+                    bool target = selectedItem != null || (selectedSkill == MoveIndex && Math.Abs(i - from) == 1);
+                    h = target ? CombatantSlotView.Highlight.AllyTarget
+                        : selectedSkill == MoveIndex && c == shownHero ? CombatantSlotView.Highlight.Actor
+                        : c == inspected ? CombatantSlotView.Highlight.Inspected : CombatantSlotView.Highlight.None;
+                }
+                partySlots[i].Bind(c, h, SpriteFor(c));
+            }
+            // 전투 밖에는 적 칸을 끈다 (적 2번 칸 뒤의 골동품을 누를 수 있게). 전투가 시작되면 BindSlots가 다시 켠다.
+            foreach (var slot in enemySlots) slot.gameObject.SetActive(false);
         }
 
         // ── 입력 ─────────────────────────────
@@ -204,6 +392,14 @@ namespace Grimward.Presentation.Battle
 
         private void OnMove()
         {
+            if (exploring)
+            {
+                if (selectedSkill == MoveIndex) { ClearSelection(); return; }
+                selectedSkill = MoveIndex; selectedItem = null;
+                infoText.text = $"이동: {shownHero?.Name}의 바로 옆 모험가를 고르면 자리를 바꿉니다 (5를 다시 누르면 취소)";
+                Refresh();
+                return;
+            }
             if (!CanInput) return;
             if (selectedSkill == MoveIndex) { ClearSelection(); return; }
             selectedSkill = MoveIndex;
@@ -214,6 +410,15 @@ namespace Grimward.Presentation.Battle
 
         private void OnItem(string itemId)
         {
+            if (exploring)
+            {
+                if (OutsideItemFilter == null || !OutsideItemFilter(db.GetItem(itemId))) return;
+                if (selectedItem == itemId) { ClearSelection(); return; }
+                selectedSkill = -1; selectedItem = itemId;
+                infoText.text = $"{db.GetItem(itemId).name}: 모험가를 고르세요";
+                Refresh();
+                return;
+            }
             if (!CanInput || !battle.CanUseItem) return;
             if (selectedItem == itemId) { ClearSelection(); return; }
             selectedSkill = -1;
@@ -225,6 +430,28 @@ namespace Grimward.Presentation.Battle
 
         private void OnSlot(BattleSide side, int rank)
         {
+            if (exploring)
+            {
+                var hero = side == BattleSide.Party && rank <= exploreParty.Count ? exploreParty[rank - 1] : null;
+                if (hero == null) return;
+                if (selectedSkill == MoveIndex)
+                {
+                    int from = exploreParty.IndexOf(shownHero) + 1;
+                    if (Math.Abs(rank - from) == 1) { ClearSelection(); PartySwapRequested?.Invoke(from, rank); }
+                    return;
+                }
+                if (selectedItem != null)
+                {
+                    string item = selectedItem;
+                    ClearSelection();
+                    ItemUseRequested?.Invoke(item, rank);
+                    return;
+                }
+                shownHero = hero;
+                inspected = inspected == hero ? null : hero;
+                Refresh();
+                return;
+            }
             var target = battle?.Formation.At(side, rank);
             if (target == null || !target.IsAlive) return;
 
@@ -275,6 +502,13 @@ namespace Grimward.Presentation.Battle
         private void HandleHotkeys()
         {
             var kb = Keyboard.current;
+            if (kb != null && exploring)
+            {
+                // 전투 밖: 5 = 이동(자리 바꾸기)만
+                if (kb[SkillKeys[MoveIndex]].wasPressedThisFrame || kb[NumpadKeys[MoveIndex]].wasPressedThisFrame)
+                    heroPanel.PressButton(MoveIndex);
+                return;
+            }
             if (kb == null || !CanInput) return;
             for (int i = 0; i < SkillKeys.Length; i++)
             {
@@ -329,6 +563,7 @@ namespace Grimward.Presentation.Battle
         private void Update()
         {
             var kb = Keyboard.current;
+            if (kb != null && kb[Key.Numpad0].wasPressedThisFrame && logPanel != null) logPanel.SetActive(!logPanel.activeSelf);
             if (kb != null && kb[Key.A].wasPressedThisFrame) SetAutoPlay(!autoPlay, autoFocus);
             if (autoPlay) TickAuto();
             else HandleHotkeys();
@@ -519,7 +754,7 @@ namespace Grimward.Presentation.Battle
 
         private void Refresh(bool bindSlots)
         {
-            if (battle == null) return;
+            if (battle == null) { if (exploring) RefreshExplore(); return; }
             var actor = battle.CurrentActor;
             if (actor != null && actor.Side == BattleSide.Party) shownHero = actor;
             if (shownHero == null || !battle.Formation.Side(BattleSide.Party).Contains(shownHero))
@@ -547,7 +782,11 @@ namespace Grimward.Presentation.Battle
             bag.Bind(battle.Inventory, db, CanInput && battle.CanUseItem, selectedItem);
             logText.text = string.Join("\n", battle.Log.Skip(Math.Max(0, battle.Log.Count - logLines)).Select(e => e.Message));
 
-            if (battle.Phase == BattlePhase.Ended && !playing && !resultPanel.activeSelf)
+            if (battle.Phase == BattlePhase.Ended && !playing && expeditionBattle)
+            {
+                if (!finishing) StartCoroutine(FinishBanner());
+            }
+            else if (battle.Phase == BattlePhase.Ended && !playing && !resultPanel.activeSelf)
             {
                 resultPanel.SetActive(true);
                 string outcome = battle.Outcome == BattleOutcome.Victory ? "승리"
@@ -587,7 +826,7 @@ namespace Grimward.Presentation.Battle
         /// <summary>포인터가 올라간 대상(기술 버튼 > 상태·상세 정보), 없으면 선택 중인 기술(모바일)의 설명을 띄운다.</summary>
         private void UpdateTooltip()
         {
-            if (battle == null || battle.Phase == BattlePhase.Ended) { tooltip.Hide(); return; }
+            if (battle == null ? !exploring : battle.Phase == BattlePhase.Ended) { tooltip.Hide(); return; }
             if (hoveredButton < 0 && hoverText != null)
             {
                 if (hoverAnchor != null) tooltip.Show(hoverText, hoverAnchor);

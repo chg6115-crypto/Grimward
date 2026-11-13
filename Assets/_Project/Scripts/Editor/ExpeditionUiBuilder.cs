@@ -13,8 +13,8 @@ namespace Grimward.EditorTools
 {
     /// <summary>
     /// M2 탐험 화면 메뉴.
-    /// 1) 전투 화면 프리팹: BattleTest 씬의 Panel_Battle(손으로 고친 배치 그대로)에 시계를 붙이고 프리팹으로 저장 → 두 씬이 공유.
-    /// 2) 탐험 화면: Expedition 씬에 탐험 기본 화면 + 지도 오버레이(육각 칸 61개를 미리 배치) + 전투 패널(프리팹) + 테스트 부트스트랩을 만든다.
+    /// 1) 전투 화면 프리팹: BattleTest 씬의 Panel_Battle(손으로 고친 배치 그대로)에 시계·탐험 무대 요소를 붙이고 프리팹으로 저장 → 두 씬이 공유.
+    /// 2) 탐험 화면: Expedition 씬에 탐험 무대(전투 화면 프리팹) + 지도 오버레이(육각 칸 61개를 미리 배치) + 테스트 부트스트랩을 만든다.
     /// </summary>
     public static class ExpeditionUiBuilder
     {
@@ -52,11 +52,140 @@ namespace Grimward.EditorTools
                 EditorUtility.SetDirty(screen);
             }
 
+            AddStage(screen);
+
             Directory.CreateDirectory(Path.GetDirectoryName(PrefabPath));
             PrefabUtility.SaveAsPrefabAssetAndConnect(screen.gameObject, PrefabPath, InteractionMode.AutomatedAction);
             EditorSceneManager.MarkSceneDirty(scene);
             EditorSceneManager.SaveScene(scene);
-            Debug.Log($"Grimward: 전투 화면을 프리팹으로 저장했습니다 ({PrefabPath}). 시계(Img_Clock)를 Panel_Top 왼쪽에 붙였습니다.");
+            Debug.Log($"Grimward: 전투 화면을 프리팹으로 저장했습니다 ({PrefabPath}). 시계 · 지도 버튼 · 무대 골동품 · 골동품 창 · 큰 글자를 붙였습니다 (이미 있으면 그대로 둠).");
+        }
+
+        // 골동품 창: 물건(적 2번 칸) 오른쪽, 적 3·4번 칸 위
+        private static readonly Vector2 CurioWindowMin = new Vector2(.76f, .47f);
+        private static readonly Vector2 CurioWindowMax = new Vector2(.99f, .9f);
+
+        private static bool Near(Vector2 a, Vector2 b) => (a - b).sqrMagnitude < 1e-5f;
+
+        /// <summary>
+        /// 무대 물건을 적 2번 칸 자리에 두고 몬스터 칸들보다 먼저(뒤에) 그린다.
+        /// 손으로 옮긴 위치는 그대로 두고, 처음 만든 기본 위치(파티·적 사이)일 때만 옮긴다.
+        /// </summary>
+        private static void PlaceCurio(RectTransform curio, Transform field)
+        {
+            var slot2 = field.Find("Btn_EnemySlot2") as RectTransform;
+            bool isDefault = Near(curio.anchorMin, new Vector2(.445f, .12f)) && Near(curio.anchorMax, new Vector2(.555f, .72f));
+            if (slot2 != null && isDefault)
+            {
+                curio.anchorMin = new Vector2(slot2.anchorMin.x, .12f);
+                curio.anchorMax = new Vector2(slot2.anchorMax.x, .72f);
+            }
+            int first = int.MaxValue;
+            for (int rank = 1; rank <= 4; rank++)
+                if (field.Find($"Btn_EnemySlot{rank}") is Transform t) first = Mathf.Min(first, t.GetSiblingIndex());
+            if (first != int.MaxValue && curio.GetSiblingIndex() > first) curio.SetSiblingIndex(first);
+        }
+
+        private static Transform FindDeep(Transform root, string name)
+        {
+            if (root.name == name) return root;
+            foreach (Transform child in root)
+            {
+                var hit = FindDeep(child, name);
+                if (hit != null) return hit;
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// 탐험 무대 요소를 전투 화면에 붙인다. 이미 있는 요소는 손으로 고친 배치 그대로 두고 연결만 다시 한다.
+        /// Btn_OpenMap(Panel_Top, 도주 버튼 자리) · Btn_Curio(Panel_Field 가운데) · Txt_StageBanner · Panel_Curio(골동품 창).
+        /// 전투 기록(Panel_Log)은 평소 꺼 두고 넘패드 0으로 켠다.
+        /// </summary>
+        private static void AddStage(BattleScreen screen)
+        {
+            var panel = screen.transform;
+            var top = panel.Find("Panel_Top") ?? panel;
+            var field = panel.Find("Panel_Field") ?? panel;
+
+            // 지도 버튼: 도주 버튼과 같은 자리 (전투 밖에서만 보이므로 겹치지 않는다)
+            var mapBtn = top.Find("Btn_OpenMap")?.GetComponent<Button>();
+            if (mapBtn == null)
+            {
+                mapBtn = UiBuild.Button("Btn_OpenMap", top, "지도", 24, new Vector2(.9f, .15f), new Vector2(.98f, .85f));
+                if (top.Find("Btn_Flee") is RectTransform flee)
+                {
+                    var r = (RectTransform)mapBtn.transform;
+                    r.anchorMin = flee.anchorMin; r.anchorMax = flee.anchorMax;
+                    r.offsetMin = flee.offsetMin; r.offsetMax = flee.offsetMax;
+                }
+            }
+
+            // 무대 물건: 적 2번 칸 자리, 몬스터보다 뒤에 그린다 (모바일에서 파티·적 사이 공간이 좁으므로)
+            var curio = field.Find("Btn_Curio")?.GetComponent<Button>();
+            Image curioImg; TMP_Text curioName;
+            if (curio == null)
+            {
+                var root = UiBuild.Image("Btn_Curio", field, new Vector2(.445f, .12f), new Vector2(.555f, .72f), new Color(1, 1, 1, 0), true);
+                curio = root.gameObject.AddComponent<Button>();
+                curio.transition = Selectable.Transition.ColorTint;
+                curioImg = UiBuild.Image("Img_Curio", root.transform, new Vector2(.05f, .22f), new Vector2(.95f, 1f), Color.white);
+                curioImg.preserveAspect = true;
+                curio.targetGraphic = curioImg;
+                curioName = UiBuild.Text("Txt_CurioName", root.transform, "", 20, new Vector2(-.3f, 0f), new Vector2(1.3f, .2f),
+                    TextAlignmentOptions.Center, UiBuild.Gold);
+                curioName.textWrappingMode = TextWrappingModes.NoWrap;
+            }
+            else
+            {
+                curioImg = curio.transform.Find("Img_Curio")?.GetComponent<Image>();
+                curioName = curio.transform.Find("Txt_CurioName")?.GetComponent<TMP_Text>();
+            }
+            PlaceCurio((RectTransform)curio.transform, field);
+
+            // 큰 글자 (승리 · 도주 · 전멸)
+            var banner = field.Find("Txt_StageBanner")?.GetComponent<TMP_Text>();
+            if (banner == null)
+            {
+                banner = UiBuild.Text("Txt_StageBanner", field, "", 84, new Vector2(.25f, .55f), new Vector2(.75f, .98f),
+                    TextAlignmentOptions.Center, UiBuild.Gold);
+                banner.fontStyle = FontStyles.Bold;
+                banner.raycastTarget = false;
+            }
+
+            // 골동품 창: 물건 오른쪽 위 (다키스트 던전식)
+            var window = panel.Find("Panel_Curio")?.GetComponent<CurioWindow>();
+            if (window != null && window.transform is RectTransform wr && Near(wr.anchorMin, new Vector2(.585f, .47f)))
+            {   // 이전 기본 위치(물건과 겹침)였으면 오른쪽으로 옮긴다
+                wr.anchorMin = CurioWindowMin; wr.anchorMax = CurioWindowMax;
+            }
+            if (window == null)
+            {
+                var box = UiBuild.Image("Panel_Curio", panel, CurioWindowMin, CurioWindowMax,
+                    new Color(0.1f, 0.09f, 0.08f, 0.97f), true).transform;
+                var border = box.gameObject.AddComponent<Outline>();
+                border.effectColor = new Color(.6f, .48f, .25f, 1f);
+                border.effectDistance = new Vector2(3, -3);
+                var title = UiBuild.Text("Txt_CurioTitle", box, "", 30, new Vector2(.05f, .8f), new Vector2(.95f, .96f),
+                    TextAlignmentOptions.Center, UiBuild.Gold);
+                var body = UiBuild.Text("Txt_CurioBody", box, "", 22, new Vector2(.06f, .36f), new Vector2(.94f, .79f),
+                    TextAlignmentOptions.Center);
+                body.overflowMode = TextOverflowModes.Overflow;
+                var act = UiBuild.Button("Btn_CurioAct", box, "조사한다", 24, new Vector2(.05f, .05f), new Vector2(.4f, .32f));
+                var supply = UiBuild.Button("Btn_CurioSupply", box, "보급품", 22, new Vector2(.43f, .05f), new Vector2(.75f, .32f));
+                var close = UiBuild.Button("Btn_CurioClose", box, "X", 30, new Vector2(.78f, .05f), new Vector2(.95f, .32f));
+                window = box.gameObject.AddComponent<CurioWindow>();
+                window.Assign(title, body, act, supply, close);
+                EditorUtility.SetDirty(window);
+                // 떠오르는 글자·툴팁보다 아래
+                var floating = panel.Find("Panel_FloatingText");
+                if (floating != null) box.SetSiblingIndex(floating.GetSiblingIndex());
+                box.gameObject.SetActive(false);
+            }
+
+            var log = FindDeep(panel, "Panel_Log");
+            screen.AssignStage(mapBtn, curio, curioImg, curioName, window, banner, log != null ? log.gameObject : null);
+            EditorUtility.SetDirty(screen);
         }
 
         // ── 2. 탐험 화면 ─────────────────────────────
@@ -87,20 +216,19 @@ namespace Grimward.EditorTools
 
             UiBuild.EnsureEventSystem();
             var safe = UiBuild.Canvas("Canvas_Expedition");
-            var explore = BuildExploreScreen(safe);
-            var map = BuildMapOverlay(safe);
-
+            // 탐험 무대 = 전투 화면 프리팹. 지도 오버레이는 그 위에 그려지도록 뒤에 만든다.
             var battleGo = (GameObject)PrefabUtility.InstantiatePrefab(prefab, safe);
             var battleRect = (RectTransform)battleGo.transform;
             battleRect.anchorMin = Vector2.zero; battleRect.anchorMax = Vector2.one;
             battleRect.offsetMin = battleRect.offsetMax = Vector2.zero;
             battleGo.SetActive(false);
+            var map = BuildMapOverlay(safe);
 
             var boot = new GameObject("ExpeditionTestBootstrap").AddComponent<ExpeditionTestBootstrap>();
-            boot.Assign(explore, map, battleGo.GetComponent<BattleScreen>());
+            boot.Assign(battleGo.GetComponent<BattleScreen>(), map);
             EditorUtility.SetDirty(boot);
             EditorSceneManager.SaveScene(scene, path);
-            Debug.Log("Grimward: Expedition 씬에 탐험 화면 · 지도 오버레이 · 전투 패널(프리팹)을 만들었습니다.");
+            Debug.Log("Grimward: Expedition 씬에 탐험 무대(전투 화면 프리팹)와 지도 오버레이를 만들었습니다.");
         }
 
         private static Sprite Hex(string file) => AssetDatabase.LoadAssetAtPath<Sprite>(HexArt + file);
@@ -122,51 +250,6 @@ namespace Grimward.EditorTools
             var sprite = AssetDatabase.LoadAssetAtPath<Sprite>(path);
             if (sprite == null) Debug.LogWarning($"Grimward: 지도 아트가 없습니다 ({path}).");
             return sprite;
-        }
-
-        // 탐험 기본 화면: 가운데 무대(2단계 전까지는 장소 이름) + 왼쪽 위 시계 + 오른쪽 패널
-        private static ExploreScreen BuildExploreScreen(Transform safe)
-        {
-            var panel = UiBuild.Image("Panel_Explore", safe, Vector2.zero, Vector2.one, new Color(0.06f, 0.08f, 0.06f)).transform;
-
-            var top = UiBuild.Image("Panel_ExploreTop", panel, new Vector2(0, .9f), new Vector2(.66f, 1), new Color(0, 0, 0, .35f)).transform;
-            var clock = BuildClock(top, 92f, true);
-            var clockRect = (RectTransform)clock.transform;
-            clockRect.anchorMin = clockRect.anchorMax = new Vector2(0f, .5f);
-            clockRect.anchoredPosition = new Vector2(64f, 0f);
-
-            var stage = UiBuild.Rect("Panel_Stage", panel, new Vector2(0, 0), new Vector2(.66f, .9f));
-            var stageText = UiBuild.Text("Txt_Stage", stage, "", 56, new Vector2(.05f, .35f), new Vector2(.95f, .65f),
-                TextAlignmentOptions.Center, UiBuild.Gold);
-
-            var side = UiBuild.Image("Panel_ExploreSide", panel, new Vector2(.665f, .015f), new Vector2(.99f, .985f), UiBuild.PanelColor).transform;
-            var nodeName = UiBuild.Text("Txt_NodeName", side, "", 34, new Vector2(.04f, .91f), new Vector2(.96f, .985f),
-                TextAlignmentOptions.MidlineLeft, UiBuild.Gold);
-            var nodeInfo = UiBuild.Text("Txt_NodeInfo", side, "", 26, new Vector2(.04f, .69f), new Vector2(.96f, .91f));
-            nodeInfo.overflowMode = TextOverflowModes.Overflow;
-            // 버튼 2×2 (높이 120px 이상)
-            var mapBtn = UiBuild.Button("Btn_OpenMap", side, "지도", 30, new Vector2(.04f, .55f), new Vector2(.49f, .68f));
-            var ret = UiBuild.Button("Btn_Return", side, "마을로 귀환", 30, new Vector2(.51f, .55f), new Vector2(.96f, .68f));
-            var ev = UiBuild.Button("Btn_EventAction", side, "조사한다", 28, new Vector2(.04f, .405f), new Vector2(.49f, .535f));
-            var supply = UiBuild.Button("Btn_EventSupply", side, "보급품 쓰고 조사", 26, new Vector2(.51f, .405f), new Vector2(.96f, .535f));
-            UiBuild.Divider(side, new Vector2(.03f, .39f), new Vector2(.97f, .393f));
-            var party = UiBuild.Text("Txt_Party", side, "", 24, new Vector2(.04f, .265f), new Vector2(.96f, .385f));
-            var bag = UiBuild.Text("Txt_Bag", side, "", 22, new Vector2(.04f, .205f), new Vector2(.96f, .265f));
-            var logBg = UiBuild.Image("Panel_ExploreLog", side, new Vector2(.03f, .015f), new Vector2(.97f, .2f), new Color(0, 0, 0, .35f));
-            var log = UiBuild.Text("Txt_ExploreLog", logBg.transform, "", 22, new Vector2(.02f, .03f), new Vector2(.98f, .97f),
-                TextAlignmentOptions.BottomLeft);
-
-            var result = UiBuild.Image("Panel_ExpeditionResult", panel, new Vector2(.3f, .25f), new Vector2(.7f, .8f),
-                new Color(0.1f, 0.09f, 0.08f, 0.97f), true);
-            var resultText = UiBuild.Text("Txt_ExpeditionResult", result.transform, "", 30, new Vector2(.05f, .3f), new Vector2(.95f, .95f),
-                TextAlignmentOptions.Center);
-            var again = UiBuild.Button("Btn_NewExpedition", result.transform, "다시 출정", 30, new Vector2(.3f, .06f), new Vector2(.7f, .24f));
-            result.gameObject.SetActive(false);
-
-            var view = panel.gameObject.AddComponent<ExploreScreen>();
-            view.Assign(clock, stageText, nodeName, nodeInfo, mapBtn, ret, ev, supply, party, bag, log, result.gameObject, resultText, again);
-            EditorUtility.SetDirty(view);
-            return view;
         }
 
         // 지도 오버레이: 화면 전체 어둡게(누르면 닫힘) + 가운데 창(제목 줄 · 지도 · 확대 조절)
@@ -222,11 +305,15 @@ namespace Grimward.EditorTools
             var zoomIn = UiBuild.Button("Btn_ZoomIn", zoomBar, "+", 40, new Vector2(.8f, .08f), new Vector2(.98f, .92f));
             var slider = BuildSlider(zoomBar, new Vector2(.25f, .3f), new Vector2(.75f, .7f));
 
+            // 마을로 귀환 (왼쪽 아래, 출발점에서만)
+            var ret = UiBuild.Button("Btn_MapReturn", window, "마을로 귀환", 28, new Vector2(.015f, .025f), new Vector2(.2f, .115f));
+
             var zoom = area.gameObject.AddComponent<MapZoom>();
             zoom.Assign(scroll, slider, zoomIn, zoomOut);
 
             var view = root.gameObject.AddComponent<MapScreen>();
             view.Assign(dimButton, close, region, travel, travelBtn, tiles.ToArray(), scroll, zoom);
+            view.AssignReturn(ret);
             view.AssignSprites(MapArt("map_icon_camp.png"), MapArt("map_icon_battle.png"), MapArt("map_icon_boss.png"),
                 MapArt("map_icon_gather.png"), MapArt("map_icon_investigate.png"), MapArt("map_icon_treasure.png"),
                 MapArt("map_road_solid.png"), MapArt("map_road_dashed.png"));

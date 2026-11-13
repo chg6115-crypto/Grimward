@@ -267,5 +267,80 @@ namespace Grimward.Tests
             a.BeginExpedition();
             Assert.That(a.KnockdownsThisExpedition, Is.EqualTo(0));
         }
+
+        // ── 레벨에 따라 오르는 버프 (사제 축복, 기획안 6장) ─────────────────
+
+        private static EffectDefinition Scaled(string stat, double value, double per, int step, string doubled = null) =>
+            new EffectDefinition { kind = "stat", stat = stat, value = value, duration = 3, target = "target",
+                doubledVsType = doubled, perLevel = per, levelStep = step };
+
+        [Test]
+        public void EffectValue_ScalesWithLevelStep()
+        {
+            var every2 = Scaled(DataKeys.Stat.DamagePct, 0.1, 0.05, 2);   // Lv3·5마다 +5%
+            Assert.That(new[] { 1, 2, 3, 4, 5, 6 }.Select(l => System.Math.Round(every2.ValueAt(l), 3)),
+                Is.EqualTo(new[] { 0.1, 0.1, 0.15, 0.15, 0.2, 0.2 }));
+            var every1 = Scaled(DataKeys.Stat.PoisonResist, 0.05, 0.05, 1); // 레벨 × 5%p
+            Assert.That(new[] { 1, 2, 3, 4, 5, 6 }.Select(l => System.Math.Round(every1.ValueAt(l), 3)),
+                Is.EqualTo(new[] { 0.05, 0.1, 0.15, 0.2, 0.25, 0.3 }));
+            var flat = Scaled(DataKeys.Stat.Accuracy, 10, 0, 0);
+            Assert.That(flat.ValueAt(6), Is.EqualTo(10));
+        }
+
+        private GameDatabase DbWithBlessing()
+        {
+            var file = TestData.File();
+            var bless = TestData.Skill("bless", TestData.All, "ally", damaging: false);
+            var effects = new System.Collections.Generic.List<EffectDefinition>
+            {
+                Scaled(DataKeys.Stat.DamagePct, 0.1, 0.05, 2, "unholy"),
+                Scaled(DataKeys.Stat.Armor, 0.1, 0.05, 2),
+            };
+            foreach (var r in new[] { DataKeys.Stat.StunResist, DataKeys.Stat.PoisonResist, DataKeys.Stat.BleedResist,
+                         DataKeys.Stat.BurnResist, DataKeys.Stat.DebuffResist, DataKeys.Stat.MagicResist })
+                effects.Add(Scaled(r, 0.05, 0.05, 1));
+            bless.effects = effects.ToArray();
+            file.skills = file.skills.Concat(new[] { bless }).ToArray();
+            return new GameDatabase(file);
+        }
+
+        [Test]
+        public void Blessing_RaisesAllResistsByCasterLevel()
+        {
+            db = DbWithBlessing(); factory = new CombatantFactory(db);
+            ctx = new BattleContext(db.Balance, rng, new Formation(4), factory, false) { Round = 1 };
+            resolver = new SkillResolver(ctx);
+            var adv = TestData.Hero(db, "swordsman"); adv.Level = 3;
+            var priest = Add(factory.FromAdventurer(adv));
+            var ally = Add(factory.FromAdventurer(TestData.Hero(db, "mage")));
+            var before = new[] { DataKeys.Resist.Stun, DataKeys.Resist.Poison, DataKeys.Resist.Bleed,
+                DataKeys.Resist.Burn, DataKeys.Resist.Debuff }.Select(ally.Resist).ToArray();
+            double magicBefore = ally.EffectiveMagicResist, armorBefore = ally.EffectiveArmor;
+
+            Use(priest, "bless", ally);
+
+            var after = new[] { DataKeys.Resist.Stun, DataKeys.Resist.Poison, DataKeys.Resist.Bleed,
+                DataKeys.Resist.Burn, DataKeys.Resist.Debuff }.Select(ally.Resist).ToArray();
+            for (int i = 0; i < 5; i++) Assert.That(after[i] - before[i], Is.EqualTo(0.15).Within(1e-9)); // Lv3 = 15%p
+            Assert.That(ally.EffectiveMagicResist - magicBefore, Is.EqualTo(0.15).Within(1e-9));
+            Assert.That(ally.EffectiveArmor - armorBefore, Is.EqualTo(0.15).Within(1e-9));               // Lv3 = 10 + 5
+            Assert.That(ally.Effects.Sum(DataKeys.Stat.DamagePct), Is.EqualTo(0.15).Within(1e-9));
+            // 저항 6종은 알림 한 줄로 묶인다
+            Assert.That(ctx.Log.Count(e => e.Kind == BattleEventKind.EffectApplied && e.Message.Contains("저항")), Is.EqualTo(1));
+        }
+
+        [Test]
+        public void Blessing_Stacks()
+        {
+            db = DbWithBlessing(); factory = new CombatantFactory(db);
+            ctx = new BattleContext(db.Balance, rng, new Formation(4), factory, false) { Round = 1 };
+            resolver = new SkillResolver(ctx);
+            var priest = Add(factory.FromAdventurer(TestData.Hero(db, "swordsman"))); // Lv1
+            var ally = Add(factory.FromAdventurer(TestData.Hero(db, "mage")));
+            double before = ally.Resist(DataKeys.Resist.Poison);
+            Use(priest, "bless", ally);
+            Use(priest, "bless", ally);
+            Assert.That(ally.Resist(DataKeys.Resist.Poison) - before, Is.EqualTo(0.1).Within(1e-9)); // 5%p × 2
+        }
     }
 }

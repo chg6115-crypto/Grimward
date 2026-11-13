@@ -398,7 +398,7 @@ MonoBehaviour:
   screen: {fileID: 1274962412}
   seed: 12345
   party: 2
-  encounter: 1
+  encounter: 6
   night: 0
   potions: 3
   herbs: 2

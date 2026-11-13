@@ -22,8 +22,9 @@ namespace Grimward.Domain.Combat
         /// <summary>이번 차례에 걸린 효과는 이번 차례 끝에 줄지 않는다.</summary>
         internal bool FreshThisTurn { get; set; }
 
+        /// <param name="level">시전자 레벨. 레벨에 따라 오르는 효과(perLevel)의 수치를 정한다.</param>
         public ActiveEffect(string sourceSkillId, string sourceSkillName, EffectDefinition def, bool isPassive = false,
-            int sourceUid = 0)
+            int sourceUid = 0, int level = 1)
         {
             IsPassive = isPassive;
             SourceUid = sourceUid;
@@ -31,7 +32,7 @@ namespace Grimward.Domain.Combat
             SourceSkillName = sourceSkillName;
             Kind = def.kind;
             Stat = def.stat;
-            Value = def.value;
+            Value = def.ValueAt(level);
             DoubledVsType = def.doubledVsType;
             DamagePerTurn = def.damagePerTurn;
             Remaining = def.duration;

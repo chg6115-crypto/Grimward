@@ -146,11 +146,12 @@ namespace Grimward.Domain.Combat
         public void AddImmunity(string kind) { if (!string.IsNullOrEmpty(kind)) immunities.Add(kind); }
         public bool IsImmune(string kind) => immunities.Contains(kind);
 
-        /// <summary>상태이상 저항 (DataKeys.Resist). 기절은 회복 직후 가산(효과)을 더한다.</summary>
+        /// <summary>상태이상 저항 (DataKeys.Resist) = 기본 저항 + 효과 가산(축복·기절 회복 보호 등). 상한 없음.</summary>
         public double Resist(string kind)
         {
             resists.TryGetValue(kind, out double v);
-            if (kind == DataKeys.Resist.Stun) v += Effects.Sum(DataKeys.Stat.StunResist);
+            var stat = DataKeys.Stat.ResistStatOf(kind);
+            if (stat != null) v += Effects.Sum(stat);
             return v;
         }
 

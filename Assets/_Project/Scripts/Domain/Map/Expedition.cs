@@ -46,7 +46,9 @@ namespace Grimward.Domain.Map
 
         public ExpeditionMap Map { get; }
         public GameTime Time { get; }
-        public IReadOnlyList<Adventurer> Party { get; }
+        private readonly List<Adventurer> party;
+        /// <summary>파티 순서 = 전투 시작 칸 순서 (전투 밖에서 바꿀 수 있다).</summary>
+        public IReadOnlyList<Adventurer> Party => party;
         public BattleInventory Bag { get; }
         public IReadOnlyList<string> Log => log;
         public ExpeditionPhase Phase { get; private set; } = ExpeditionPhase.Exploring;
@@ -61,7 +63,7 @@ namespace Grimward.Domain.Map
         {
             this.db = db ?? throw new ArgumentNullException(nameof(db));
             this.random = random ?? throw new ArgumentNullException(nameof(random));
-            Party = party ?? throw new ArgumentNullException(nameof(party));
+            this.party = (party ?? throw new ArgumentNullException(nameof(party))).ToList();
             Bag = bag ?? new BattleInventory();
             Time = start ?? throw new ArgumentNullException(nameof(start));
             foreach (var a in Party) a.BeginExpedition();
@@ -71,6 +73,58 @@ namespace Grimward.Domain.Map
         }
 
         public IEnumerable<Adventurer> Alive => Party.Where(a => !a.IsDead);
+
+        // ── 전투 밖: 자리 바꾸기 · 아이템 ─────────────────────────────
+
+        /// <summary>
+        /// 전투 밖에서 살아 있는 모험가 두 명의 자리를 바꾼다 (칸 = 살아 있는 순서 1~4, 바로 옆끼리만).
+        /// 다음 전투는 이 순서로 시작한다.
+        /// </summary>
+        public void SwapAdjacent(int rankA, int rankB)
+        {
+            if (Phase != ExpeditionPhase.Exploring) throw new InvalidOperationException("전투 중에는 전투 화면에서 이동한다.");
+            var alive = Alive.ToList();
+            if (Math.Abs(rankA - rankB) != 1 || rankA < 1 || rankB < 1 || rankA > alive.Count || rankB > alive.Count)
+                throw new InvalidOperationException("바로 옆 모험가와만 자리를 바꿀 수 있다.");
+            int i = party.IndexOf(alive[rankA - 1]), j = party.IndexOf(alive[rankB - 1]);
+            (party[i], party[j]) = (party[j], party[i]);
+            log.Add($"{Time} 자리 바꿈 — {party[j].Name} ↔ {party[i].Name}");
+        }
+
+        /// <summary>전투 밖에서 쓸 수 있는 아이템: 회복(heal) 또는 현장 치료(treatInjury). 해독·지혈은 전투 중 효과라 전투 밖에서는 쓸 데가 없다.</summary>
+        public static bool IsUsableOutsideBattle(ItemDefinition item) => item.heal > 0 || item.treatInjury;
+
+        /// <summary>
+        /// 전투 밖 아이템 사용 (시간 소모 없음). 회복약 = HP 회복(최대 HP까지), 붕대 = 현장 치료(경상 제거 · 중상 → 경상).
+        /// 효과가 하나도 없으면(HP 가득 + 치료할 부상 없음) 쓰지 않는다. 결과 문장을 돌려준다.
+        /// </summary>
+        public string UseItem(string itemId, Adventurer target)
+        {
+            if (Phase != ExpeditionPhase.Exploring) throw new InvalidOperationException("지금은 아이템을 쓸 수 없다.");
+            if (target == null || target.IsDead || !party.Contains(target)) throw new InvalidOperationException("아이템 대상이 잘못됐다.");
+            var item = db.GetItem(itemId);
+            if (!IsUsableOutsideBattle(item)) throw new InvalidOperationException($"{item.name}은(는) 전투 밖에서 쓸 데가 없다.");
+            if (Bag.Count(itemId) <= 0) throw new InvalidOperationException($"남은 {item.name}: 0개");
+
+            int max = StatFormulas.MaxHp(db.Balance, target);
+            int heal = item.heal > 0 ? Math.Min(item.heal, max - target.CurrentHp) : 0;
+            var treatable = item.treatInjury
+                ? target.Injuries.Where(i => db.GetInjury(i.Id).fieldTreatable).ToList()
+                : new List<InjuryState>();
+            if (heal <= 0 && treatable.Count == 0) throw new InvalidOperationException($"{target.Name}에게 {item.name}은(는) 효과가 없다.");
+
+            Bag.TryConsume(itemId);
+            var parts = new List<string>();
+            if (heal > 0) { target.CurrentHp += heal; parts.Add($"HP +{heal}"); }
+            foreach (var inj in treatable)
+            {
+                if (inj.Severe) { inj.Severe = false; parts.Add($"「{db.InjuryStageName(inj.Id, true)}」 → 「{db.InjuryStageName(inj.Id, false)}」"); }
+                else { target.Injuries.Remove(inj); parts.Add($"「{db.InjuryStageName(inj.Id, false)}」 치료"); }
+            }
+            string text = $"{item.name} → {target.Name}: {string.Join(" · ", parts)}";
+            log.Add($"{Time} {text}");
+            return text;
+        }
 
         // ── 지각 탐지 ─────────────────────────────
 

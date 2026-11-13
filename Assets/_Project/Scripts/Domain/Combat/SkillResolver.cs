@@ -147,17 +147,23 @@ namespace Grimward.Domain.Combat
         {
             if (skill.effects == null || !holder.IsAlive) return;
             bool hostile = skill.target == DataKeys.Target.Enemy && effectTarget == DataKeys.EffectTarget.Target;
+            var resists = new List<EffectDefinition>();
             foreach (var def in skill.effects)
             {
                 if (def.target != effectTarget) continue;
                 if (hostile && !RollStatus(actor, holder, def)) continue;
                 if (def.kind == DataKeys.EffectKind.Stun && holder.Effects.HasStun) continue; // 기절은 겹치지 않는다
-                holder.Effects.Apply(new ActiveEffect(skill.id, skill.name, def), holder == ctx.CurrentActor);
+                holder.Effects.Apply(new ActiveEffect(skill.id, skill.name, def, level: actor.Level), holder == ctx.CurrentActor);
                 if (def.kind == DataKeys.EffectKind.Stun) ThiefRules.Delay(ctx, holder, "기절");
+                // 저항 여러 종은 한 줄로 묶어 알린다 (축복: 저항 6종)
+                if (def.kind == DataKeys.EffectKind.Stat && DataKeys.Stat.IsResist(def.stat)) { resists.Add(def); continue; }
                 string length = def.kind == DataKeys.EffectKind.Stun ? "" : $" ({def.duration}라운드)";
                 ctx.Emit(new BattleEvent(BattleEventKind.EffectApplied,
-                    $"  {holder.Name}: {DescribeEffect(def)}{length}", actor, holder));
+                    $"  {holder.Name}: {DescribeEffect(def, actor.Level)}{length}", actor, holder));
             }
+            if (resists.Count > 0)
+                ctx.Emit(new BattleEvent(BattleEventKind.EffectApplied,
+                    $"  {holder.Name}: {DescribeResists(resists, actor.Level)} ({resists[0].duration}라운드)", actor, holder));
         }
 
         /// <summary>적에게 거는 효과: 면역이면 실패, 아니면 (기술 확률 − 대상 저항)으로 굴린다.</summary>
@@ -260,26 +266,57 @@ namespace Grimward.Domain.Combat
         /// <summary>HP 0: 모험가는 전투불능(전투 후 처리), 몬스터는 쓰러짐.</summary>
         public static string FallText(Combatant c) => c.Side == BattleSide.Party ? "전투불능" : "쓰러짐";
 
-        public static string DescribeEffect(EffectDefinition def)
+        /// <summary>
+        /// 저항 효과 묶음 한 줄. 수치가 모두 같으면 「저항 +15%p (기절·중독·출혈·화상·약화·마법)」, 다르면 하나씩 나열.
+        /// </summary>
+        public static string DescribeResists(IReadOnlyList<EffectDefinition> defs, int level = 1)
+        {
+            if (defs.Count == 1) return DescribeEffect(defs[0], level);
+            double v = defs[0].ValueAt(level);
+            if (defs.All(d => Math.Abs(d.ValueAt(level) - v) < 1e-9))
+                return $"저항 {(v >= 0 ? "+" : "")}{v * 100:0}%p ({string.Join("·", defs.Select(d => ResistStatName(d.stat)))})";
+            return string.Join(" · ", defs.Select(d => DescribeEffect(d, level)));
+        }
+
+        public static string ResistStatName(string stat)
+        {
+            switch (stat)
+            {
+                case DataKeys.Stat.StunResist: return "기절";
+                case DataKeys.Stat.PoisonResist: return "중독";
+                case DataKeys.Stat.BleedResist: return "출혈";
+                case DataKeys.Stat.BurnResist: return "화상";
+                case DataKeys.Stat.DebuffResist: return "약화";
+                case DataKeys.Stat.MagicResist: return "마법";
+                default: return stat;
+            }
+        }
+
+        public static string DescribeEffect(EffectDefinition def, int level = 1)
         {
             if (def.kind == DataKeys.EffectKind.Poison) return $"중독(차례마다 {def.damagePerTurn})";
             if (def.kind == DataKeys.EffectKind.Bleed) return $"출혈(차례마다 {def.damagePerTurn})";
             if (def.kind == DataKeys.EffectKind.Burn) return $"화상(차례마다 {def.damagePerTurn})";
             if (def.kind == DataKeys.EffectKind.Stun) return "기절(다음 차례 건너뜀)";
-            string sign = def.value >= 0 ? "+" : "";
+            double value = def.ValueAt(level);
+            string sign = value >= 0 ? "+" : "";
             switch (def.stat)
             {
-                case DataKeys.Stat.DamagePct: return $"피해 {sign}{def.value * 100:0}%";
-                case DataKeys.Stat.Accuracy: return $"명중 {sign}{def.value:0}";
-                case DataKeys.Stat.Crit: return $"치명 {sign}{def.value * 100:0}%p";
-                case DataKeys.Stat.Dodge: return $"회피 {sign}{def.value:0}";
-                case DataKeys.Stat.Speed: return $"속도 {sign}{def.value:0}";
-                case DataKeys.Stat.DamageTaken: return $"받는 피해 {sign}{def.value * 100:0}%";
-                case DataKeys.Stat.Armor: return $"방어도 {sign}{def.value * 100:0}%";
-                case DataKeys.Stat.MaxHpPct: return $"최대 HP {sign}{def.value * 100:0}%";
-                case DataKeys.Stat.FormationResist: return $"진형 붕괴 저항 {sign}{def.value * 100:0}%p";
-                case DataKeys.Stat.StunResist: return $"기절 저항 {sign}{def.value * 100:0}%p";
-                case DataKeys.Stat.MagicResist: return $"마법 저항 {sign}{def.value * 100:0}%p";
+                case DataKeys.Stat.DamagePct: return $"피해 {sign}{value * 100:0}%";
+                case DataKeys.Stat.Accuracy: return $"명중 {sign}{value:0}";
+                case DataKeys.Stat.Crit: return $"치명 {sign}{value * 100:0}%p";
+                case DataKeys.Stat.Dodge: return $"회피 {sign}{value:0}";
+                case DataKeys.Stat.Speed: return $"속도 {sign}{value:0}";
+                case DataKeys.Stat.DamageTaken: return $"받는 피해 {sign}{value * 100:0}%";
+                case DataKeys.Stat.Armor: return $"방어도 {sign}{value * 100:0}%";
+                case DataKeys.Stat.MaxHpPct: return $"최대 HP {sign}{value * 100:0}%";
+                case DataKeys.Stat.FormationResist: return $"진형 붕괴 저항 {sign}{value * 100:0}%p";
+                case DataKeys.Stat.StunResist: return $"기절 저항 {sign}{value * 100:0}%p";
+                case DataKeys.Stat.MagicResist: return $"마법 저항 {sign}{value * 100:0}%p";
+                case DataKeys.Stat.PoisonResist: return $"중독 저항 {sign}{value * 100:0}%p";
+                case DataKeys.Stat.BleedResist: return $"출혈 저항 {sign}{value * 100:0}%p";
+                case DataKeys.Stat.BurnResist: return $"화상 저항 {sign}{value * 100:0}%p";
+                case DataKeys.Stat.DebuffResist: return $"약화 저항 {sign}{value * 100:0}%p";
                 default: return def.stat;
             }
         }

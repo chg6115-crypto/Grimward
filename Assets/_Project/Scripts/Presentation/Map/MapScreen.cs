@@ -11,7 +11,7 @@ using UnityEngine.UI;
 namespace Grimward.Presentation.Map
 {
     /// <summary>
-    /// 탐험 지도 오버레이 (uGUI). 뒤 화면을 어둡게 덮고 가운데 창에 지도를 띄운다.
+    /// 탐험 지도 오버레이 (uGUI). 탐험 무대(전투 화면) 위를 어둡게 덮고 가운데 창에 지도를 띄운다.
     /// 창 밖(어두운 바탕)이나 X를 누르면 닫힌다. 칸을 눌러 목표를 고르고, 한 번 더 누르거나 「이동」을 누르면 이동 요청.
     /// 규칙(어디까지 한 번에 갈 수 있는지, 걸리는 시간)은 Domain(Expedition)에 있다. 칸은 에디터 메뉴가 Hierarchy에 미리 만든다.
     /// </summary>
@@ -26,6 +26,8 @@ namespace Grimward.Presentation.Map
         [Tooltip("오른쪽: 고른 칸까지 이동 시간·도착 시각")]
         [SerializeField] private TMP_Text travelText;
         [SerializeField] private Button travelButton;
+        [Tooltip("마을로 귀환 (창 왼쪽 아래). 출발점에서만 누를 수 있다")]
+        [SerializeField] private Button returnButton;
 
         [Header("지도")]
         [SerializeField] private HexTileView[] tiles;
@@ -74,6 +76,7 @@ namespace Grimward.Presentation.Map
         /// <summary>목표 노드까지 이동 요청 (여러 칸 가능).</summary>
         public event Action<string> TravelRequested;
         public event Action Closed;
+        public event Action ReturnRequested;
 
         public void Assign(Button dim, Button close, TMP_Text region, TMP_Text travel, Button travelBtn,
             HexTileView[] tileViews, ScrollRect scrollRect, MapZoom mapZoom)
@@ -81,6 +84,8 @@ namespace Grimward.Presentation.Map
             dimButton = dim; closeButton = close; regionText = region; travelText = travel; travelButton = travelBtn;
             tiles = tileViews; scroll = scrollRect; zoom = mapZoom;
         }
+
+        public void AssignReturn(Button button) => returnButton = button;
 
         public void AssignSprites(Sprite start, Sprite battle, Sprite boss, Sprite gather, Sprite investigate, Sprite treasure,
             Sprite solid, Sprite dashed)
@@ -95,6 +100,7 @@ namespace Grimward.Presentation.Map
             dimButton.onClick.AddListener(Close);
             closeButton.onClick.AddListener(Close);
             travelButton.onClick.AddListener(() => { if (selectedId != null) TravelRequested?.Invoke(selectedId); });
+            if (returnButton != null) returnButton.onClick.AddListener(() => { if (expedition != null && expedition.CanReturn) ReturnRequested?.Invoke(); });
         }
 
         public void Bind(Expedition x, GameDatabase database)
@@ -195,13 +201,10 @@ namespace Grimward.Presentation.Map
         /// 출발점 = 야영 아이콘. 남은 이벤트가 드러난 칸(방문 또는 지각) = 첫 이벤트 아이콘, 지각으로만 안 칸은 「?」를 붙인다.
         /// 아직 모르는 칸과 다 끝낸 칸은 아이콘 없음.
         /// </summary>
-        private Sprite Icon(MapNodeState node, out bool question)
+        /// <summary>이벤트 종류의 아이콘 (탐험 무대의 골동품·채집물 임시 그림으로도 쓴다).</summary>
+        public Sprite IconFor(string eventKind)
         {
-            question = false;
-            if (node.IsStart) return iconStart;
-            if (!node.HasEvents || node.Completed || !node.EventsRevealed) return null;
-            question = !node.Visited;
-            switch (node.PendingEvents().First().ev.kind)
+            switch (eventKind)
             {
                 case DataKeys.NodeEvent.Battle: return iconBattle;
                 case DataKeys.NodeEvent.Boss: return iconBoss;
@@ -210,6 +213,15 @@ namespace Grimward.Presentation.Map
                 case DataKeys.NodeEvent.Treasure: return iconTreasure;
                 default: return null;
             }
+        }
+
+        private Sprite Icon(MapNodeState node, out bool question)
+        {
+            question = false;
+            if (node.IsStart) return iconStart;
+            if (!node.HasEvents || node.Completed || !node.EventsRevealed) return null;
+            question = !node.Visited;
+            return IconFor(node.PendingEvents().First().ev.kind);
         }
 
         private void RefreshHeader()
@@ -230,6 +242,7 @@ namespace Grimward.Presentation.Map
             else if (x.HasForcedBattle) travelText.text = "<size=80%><color=#e77>전투를 끝내야 움직일 수 있다</color></size>";
             else travelText.text = "<size=80%><color=#8a8a80>금색 테두리 칸을 눌러 목적지를 고른다</color></size>";
             travelButton.interactable = selectedId != null;
+            if (returnButton != null) returnButton.interactable = x.CanReturn;
         }
 
         /// <summary>14시 · 14시 30분 · (다음 날) 02시.</summary>

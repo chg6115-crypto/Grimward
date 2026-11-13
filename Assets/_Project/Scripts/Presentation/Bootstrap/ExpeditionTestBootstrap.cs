@@ -13,15 +13,15 @@ using UnityEngine;
 namespace Grimward.Presentation.Bootstrap
 {
     /// <summary>
-    /// M2 탐험 테스트 씬(Expedition)의 구성 루트. 탐험 화면 위에 지도 오버레이를 띄우고, 전투는 같은 씬의 전투 패널로 전환한다.
-    /// 노드에 도착해 전투가 남아 있으면 전투부터, 그다음 조사·채집. 노드의 할 일이 다 끝나면 지도가 자동으로 열린다.
+    /// M2 탐험 테스트 씬(Expedition)의 구성 루트. 전투 화면(Panel_Battle)을 「탐험 무대」로 쓰고, 그 위에 지도 오버레이를 띄운다.
+    /// 노드 도착 → 전투가 남아 있으면 같은 무대에서 전투 → 골동품·채집물은 무대 가운데에 두고 눌러서 상호작용
+    /// → 노드의 할 일이 끝나거나 골동품을 지나치면 지도가 자동으로 열린다.
     /// 마을(M3)이 생기기 전까지 파티·보급품은 Inspector 값으로 시작한다.
     /// </summary>
     public sealed class ExpeditionTestBootstrap : MonoBehaviour
     {
-        [SerializeField] private ExploreScreen exploreScreen;
+        [SerializeField] private BattleScreen stage;
         [SerializeField] private MapScreen mapScreen;
-        [SerializeField] private BattleScreen battleScreen;
         [SerializeField] private string mapId = "tutorial";
         [SerializeField] private string[] partyClasses = { "swordsman", "mage" };
         [SerializeField] private int potions = 5;
@@ -31,7 +31,7 @@ namespace Grimward.Presentation.Bootstrap
         [SerializeField] private int startMinute = 360;
         [Tooltip("0이면 실행할 때마다 다른 시드")]
         [SerializeField] private int seed;
-        [Tooltip("노드에 도착한 뒤 전투 화면으로 넘어가기까지 대기(초)")]
+        [Tooltip("노드에 도착한 뒤 전투가 시작되기까지 대기(초)")]
         [SerializeField] private float battleDelay = 0.6f;
         [Tooltip("노드의 할 일이 끝난 뒤 지도가 자동으로 열리기까지 대기(초)")]
         [SerializeField] private float mapOpenDelay = 0.5f;
@@ -42,26 +42,30 @@ namespace Grimward.Presentation.Bootstrap
         private int runIndex;
 
         /// <summary>에디터 UI 빌더 전용.</summary>
-        public void Assign(ExploreScreen explore, MapScreen map, BattleScreen battle)
+        public void Assign(BattleScreen stageScreen, MapScreen map)
         {
-            exploreScreen = explore; mapScreen = map; battleScreen = battle;
+            stage = stageScreen; mapScreen = map;
         }
 
         private void Start()
         {
             Application.targetFrameRate = 60;
-            if (exploreScreen == null || mapScreen == null || battleScreen == null)
+            if (stage == null || mapScreen == null || stage.Curio == null)
             {
-                Debug.LogError("ExpeditionTestBootstrap: 화면이 비었습니다. 메뉴 Grimward → 탐험 화면 만들기를 실행하세요.");
+                Debug.LogError("ExpeditionTestBootstrap: 화면이 비었습니다. 메뉴 Grimward → 전투 화면 프리팹 갱신 → 탐험 화면 만들기를 실행하세요.");
                 return;
             }
             db = GameDataLoader.Load();
             sprites = SpriteCatalog.Load();
-            exploreScreen.MapRequested += OpenMap;
-            exploreScreen.EventRequested += OnEvent;
-            exploreScreen.ReturnRequested += OnReturn;
-            exploreScreen.RestartRequested += NewExpedition;
+            stage.MapRequested += OpenMap;
+            stage.CurioClicked += OnCurioClicked;
+            stage.Curio.ActRequested += OnCurioAct;
+            stage.Curio.Closed += OnCurioClosed;
+            stage.PartySwapRequested += OnPartySwap;
+            stage.ItemUseRequested += OnItemUse;
+            stage.OutsideItemFilter = Expedition.IsUsableOutsideBattle;
             mapScreen.TravelRequested += OnTravel;
+            mapScreen.ReturnRequested += OnReturn;
             NewExpedition();
         }
 
@@ -84,23 +88,40 @@ namespace Grimward.Presentation.Bootstrap
             bag.Add("bandage", bandages);
             var map = new FixedMapProvider(db).GetMap(mapId, random);
             expedition = new Expedition(db, random, party, bag, map, new GameTime(1, startMinute));
-            battleScreen.gameObject.SetActive(false);
+            stage.gameObject.SetActive(true);
             mapScreen.gameObject.SetActive(false);
             mapScreen.Bind(expedition, db);
-            exploreScreen.Show(expedition, db);
+            ShowStage(false);
             AfterNodeChanged();
         }
 
-        private void OpenMap()
+        // ── 무대 ─────────────────────────────
+
+        /// <summary>지금 노드의 무대: 파티 · 남은 골동품·채집물 (전투가 남아 있으면 전투가 먼저).</summary>
+        private void ShowStage(bool animateClock = true)
         {
-            if (expedition.Phase != ExpeditionPhase.Exploring || expedition.HasForcedBattle) return;
-            mapScreen.Open();
+            var x = expedition;
+            stage.ShowExplore(x.Party, x.Bag, db, sprites, x.Time, Expedition.NodeLabel(x.Map.Current), animateClock);
+            UpdateCurio();
         }
 
-        /// <summary>노드에 남은 할 일이 없으면 잠시 뒤 지도를 자동으로 연다.</summary>
+        /// <summary>무대 가운데 물건 = 이 노드에 남은 채집·조사 이벤트 (전투 중에도 그대로 보인다).</summary>
+        private void UpdateCurio()
+        {
+            var ev = expedition.Map.Current.PendingEvents()
+                .Select(p => p.ev)
+                .FirstOrDefault(e => e.kind == DataKeys.NodeEvent.Gather || e.kind == DataKeys.NodeEvent.Investigate);
+            if (ev == null) { stage.SetCurio(null, null); return; }
+            stage.SetCurio(mapScreen.IconFor(ev.kind), CurioTitle(ev));
+        }
+
+        private string CurioTitle(NodeEventDefinition ev) =>
+            ev.kind == DataKeys.NodeEvent.Investigate ? db.GetInvestigation(ev.objectId).name : db.GetItem(ev.item).name;
+
+        /// <summary>노드 상태가 바뀐 뒤: 출정 끝 → 결과, 전투 남음 → 전투, 할 일 없음 → 지도 자동 열기.</summary>
         private void AfterNodeChanged()
         {
-            if (expedition.Phase == ExpeditionPhase.Ended) { mapScreen.Close(); ShowResult(); return; }
+            if (expedition.Phase == ExpeditionPhase.Ended) { mapScreen.Close(); stage.Curio.Hide(); ShowResult(); return; }
             if (expedition.HasForcedBattle) { StartCoroutine(BattleSoon()); return; }
             if (expedition.NextEvent().ev == null) StartCoroutine(OpenMapSoon());
         }
@@ -108,59 +129,123 @@ namespace Grimward.Presentation.Bootstrap
         private IEnumerator OpenMapSoon()
         {
             yield return new WaitForSeconds(mapOpenDelay);
-            if (expedition.Phase == ExpeditionPhase.Exploring && !battleScreen.gameObject.activeSelf) OpenMap();
+            OpenMap();
         }
+
+        private void OpenMap()
+        {
+            if (expedition.Phase != ExpeditionPhase.Exploring || expedition.HasForcedBattle) return;
+            stage.Curio.Hide();
+            mapScreen.Open();
+        }
+
+        // ── 이동 ─────────────────────────────
 
         private void OnTravel(string nodeId)
         {
             if (!expedition.CanTravelTo(nodeId)) return;
             mapScreen.Close();
             expedition.TravelTo(nodeId);
-            exploreScreen.SetMessage(expedition.HasForcedBattle ? "적이다!" : null);
-            AfterNodeChanged();
-        }
-
-        private IEnumerator BattleSoon()
-        {
-            yield return new WaitForSeconds(battleDelay);
-            var battle = expedition.BeginBattle();
-            battleScreen.gameObject.SetActive(true);
-            battleScreen.Show(battle, db, OnBattleClosed, sprites, expedition.Time, "계속");
-        }
-
-        private void OnBattleClosed()
-        {
-            var outcome = expedition.CurrentBattle.Outcome;
-            expedition.FinishBattle();
-            battleScreen.gameObject.SetActive(false);
-            exploreScreen.SetMessage(outcome == BattleOutcome.Victory ? "승리" : outcome == BattleOutcome.Fled ? "도주 — 직전 장소로 물러났다" : "전멸");
-            AfterNodeChanged(); // 겹친 전투가 남았으면 이어서, 할 일이 끝났으면 지도
-        }
-
-        private void OnEvent(int index, bool useSupply)
-        {
-            var (_, ev) = expedition.NextEvent();
-            if (ev == null) return;
-            if (ev.kind == DataKeys.NodeEvent.Gather)
-            {
-                var got = expedition.Gather(index);
-                exploreScreen.SetMessage($"{db.GetItem(got.item).name} {got.amount}개를 얻었다");
-            }
-            else if (ev.kind == DataKeys.NodeEvent.Investigate)
-            {
-                var o = expedition.Investigate(index, useSupply);
-                exploreScreen.SetMessage(o.Text + (o.Gained.Count > 0 ? " — " + string.Join(", ", o.Gained) : ""));
-            }
+            ShowStage();          // 2단계: 걷기 연출. 지금은 무대를 바로 바꾼다
             AfterNodeChanged();
         }
 
         private void OnReturn()
         {
             if (!expedition.CanReturn) return;
+            mapScreen.Close();
             expedition.ReturnToTown();
-            exploreScreen.Refresh();
             AfterNodeChanged();
         }
+
+        // ── 전투 ─────────────────────────────
+
+        private IEnumerator BattleSoon()
+        {
+            yield return new WaitForSeconds(battleDelay);
+            var battle = expedition.BeginBattle();
+            stage.ShowBattle(battle, db, sprites, expedition.Time, OnBattleFinished);
+        }
+
+        private void OnBattleFinished()
+        {
+            expedition.FinishBattle();   // 승리: 이벤트 완료 · 도주: 직전 노드로 · 전멸: 출정 끝
+            if (expedition.Phase != ExpeditionPhase.Ended) ShowStage();
+            AfterNodeChanged();          // 겹친 전투가 남았으면 이어서, 할 일이 끝났으면 지도
+        }
+
+        // ── 전투 밖: 자리 바꾸기 · 아이템 ─────────────────────────────
+
+        private void OnPartySwap(int rankA, int rankB)
+        {
+            if (expedition.Phase != ExpeditionPhase.Exploring) return;
+            try { expedition.SwapAdjacent(rankA, rankB); }
+            catch (System.InvalidOperationException e) { stage.SetInfo(e.Message); return; }
+            ShowStage(false);
+        }
+
+        private void OnItemUse(string itemId, int rank)
+        {
+            if (expedition.Phase != ExpeditionPhase.Exploring) return;
+            var target = expedition.Alive.ElementAtOrDefault(rank - 1);
+            string text;
+            try { text = expedition.UseItem(itemId, target); }
+            catch (System.InvalidOperationException e) { stage.SetInfo(e.Message); return; }
+            ShowStage(false);
+            stage.SetInfo(text);
+        }
+
+        // ── 골동품·채집물 ─────────────────────────────
+
+        private void OnCurioClicked()
+        {
+            if (expedition.Phase != ExpeditionPhase.Exploring || expedition.HasForcedBattle) return;
+            var (_, ev) = expedition.NextEvent();
+            if (ev == null) return;
+            mapScreen.Close();
+            if (ev.kind == DataKeys.NodeEvent.Gather)
+            {
+                stage.Curio.ShowEvent(CurioTitle(ev), $"{db.GetItem(ev.item).name}이(가) 자라 있다. 채집하면 {ev.amount}개를 얻는다.", "채집한다", null, false);
+            }
+            else if (ev.kind == DataKeys.NodeEvent.Investigate)
+            {
+                var obj = db.GetInvestigation(ev.objectId);
+                bool hasSupplySlot = !string.IsNullOrEmpty(obj.supplyItem);
+                string supplyLabel = hasSupplySlot ? $"{db.GetItem(obj.supplyItem).name} 사용" : null;
+                bool has = hasSupplySlot && expedition.Bag.Count(obj.supplyItem) > 0;
+                stage.Curio.ShowEvent(obj.name, obj.situation, "조사한다", supplyLabel, has);
+            }
+        }
+
+        private void OnCurioAct(bool useSupply)
+        {
+            var (index, ev) = expedition.NextEvent();
+            if (ev == null) return;
+            if (ev.kind == DataKeys.NodeEvent.Gather)
+            {
+                var got = expedition.Gather(index);
+                stage.Curio.ShowResult(CurioTitle(ev), $"{db.GetItem(got.item).name} {got.amount}개를 얻었다.");
+            }
+            else if (ev.kind == DataKeys.NodeEvent.Investigate)
+            {
+                var o = expedition.Investigate(index, useSupply);
+                string grade = o.Grade == "good" ? "<color=#8d8>좋음</color>" : o.Grade == "bad" ? "<color=#e77>나쁨</color>" : "보통";
+                string gained = o.Gained.Count > 0 ? "\n\n얻은 것: " + string.Join(", ", o.Gained) : "";
+                stage.Curio.ShowResult(db.GetInvestigation(ev.objectId).name, $"[{grade}] {o.Text}{gained}");
+            }
+            // 가방·HP가 바뀌었을 수 있으니 무대를 다시 그린다 (물건은 결과창을 닫을 때 사라진다)
+            stage.ShowExplore(expedition.Party, expedition.Bag, db, sprites, expedition.Time, Expedition.NodeLabel(expedition.Map.Current));
+        }
+
+        /// <param name="afterResult">결과를 본 뒤 닫았으면 true, 아무것도 안 하고 지나갔으면 false.</param>
+        private void OnCurioClosed(bool afterResult)
+        {
+            UpdateCurio();
+            if (afterResult) AfterNodeChanged();   // 다음 이벤트가 있으면 그대로, 없으면 지도
+            else StartCoroutine(OpenMapSoon());    // 지나간다 → 골동품은 남고 지도
+        }
+
+        // ── 결과 ─────────────────────────────
 
         private void ShowResult()
         {
@@ -168,7 +253,8 @@ namespace Grimward.Presentation.Bootstrap
             string head = x.End == ExpeditionEnd.Wiped ? "<color=#e55>전멸</color>" : "귀환";
             string bag = string.Join(" · ", x.Bag.Entries.Where(e => e.Value > 0).Select(e => $"{db.GetItem(e.Key).name} {e.Value}"));
             string party = string.Join("\n", x.Party.Select(a => a.IsDead ? $"{a.Name} 사망" : $"{a.Name} HP {a.CurrentHp}"));
-            exploreScreen.ShowResult($"<size=150%>{head}</size>\n{x.Time}\n처치 {x.Killed.Count}\n{party}\n<size=85%>{bag}</size>");
+            stage.ShowExpeditionResult($"<size=150%>{head}</size>\n{x.Time}\n처치 {x.Killed.Count}\n{party}\n<size=85%>{bag}</size>",
+                "다시 출정", NewExpedition);
         }
     }
 }

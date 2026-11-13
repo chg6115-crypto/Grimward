@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Grimward.Domain.Combat;
@@ -21,19 +22,24 @@ namespace Grimward.Presentation.Battle
             }
         }
 
-        /// <summary>칸 아래 짧은 상태 표시 (버프 ▲ · 디버프 ▼ · 중독).</summary>
+        /// <summary>
+        /// 칸 아래 짧은 상태 표시 (버프 ▲ · 디버프 ▼ · 중독 등).
+        /// 능력치 효과는 기술(출처)마다 아이콘 1개로 묶는다 — 축복처럼 효과가 여러 개여도 ▲ 하나, 중첩되면 ▲2.
+        /// </summary>
         public static string StatusIcons(Combatant c)
         {
             var sb = new StringBuilder();
             foreach (var e in c.Effects.All)
             {
                 if (e.IsBleed) { sb.Append("<color=#e55>출혈</color> "); continue; }
-                if (e.IsInjury) continue; // 부상 능력치 효과는 아래 「부상」 표시로 묶는다
                 if (e.IsStun) { sb.Append("<color=#fd5>기절</color> "); continue; }
                 if (e.IsBurn) { sb.Append("<color=#f93>화상</color> "); continue; }
                 if (e.IsPoison) sb.Append("<color=#7d7>독</color> ");
-                else if (e.Value >= 0 == (e.Stat != DataKeys.Stat.DamageTaken)) sb.Append("<color=#7bf>▲</color>");
-                else sb.Append("<color=#f88>▼</color>");
+            }
+            foreach (var g in StatGroups(c))
+            {
+                sb.Append(g.IsBuff ? "<color=#7bf>▲</color>" : "<color=#f88>▼</color>");
+                if (g.Stacks > 1) sb.Append($"<size=70%>{g.Stacks}</size>");
             }
             if (c.Injuries.Count > 0) sb.Append(" <color=#e77>부상</color>");
             if (c.EscapeRound > 0) sb.Append($" <color=#fd5>도주 {c.EscapeRound}R</color>");
@@ -76,14 +82,69 @@ namespace Grimward.Presentation.Battle
         public static string Effects(Combatant c)
         {
             if (c.Effects.All.Count == 0) return "<color=#888>걸린 효과 없음</color>";
-            return string.Join("\n", c.Effects.All.Select(e =>
-                e.IsPoison ? $"<color=#7d7>중독</color> 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드"
-                    : e.IsBleed ? $"<color=#e55>출혈</color> ({e.SourceSkillName}) 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드"
-                    : e.IsBurn ? $"<color=#f93>화상</color> ({e.SourceSkillName}) 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드"
-                    : e.IsStun ? $"<color=#fd5>기절</color> ({e.SourceSkillName}) 다음 차례를 건너뜀"
-                    : e.IsInjury ? $"<color=#e77>{e.SourceSkillName}</color>: {StatLabel(e)} · 부상"
-                    : e.IsPassive ? $"<color=#eb4>{e.SourceSkillName}</color>: {StatLabel(e)} · 패시브"
-                    : $"{e.SourceSkillName}: {StatLabel(e)} · {e.Remaining}라운드"));
+            var lines = new List<string>();
+            foreach (var e in c.Effects.All)
+            {
+                if (e.IsPoison) lines.Add($"<color=#7d7>중독</color> 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드");
+                else if (e.IsBleed) lines.Add($"<color=#e55>출혈</color> ({e.SourceSkillName}) 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드");
+                else if (e.IsBurn) lines.Add($"<color=#f93>화상</color> ({e.SourceSkillName}) 차례마다 {e.DamagePerTurn} · {e.Remaining}라운드");
+                else if (e.IsStun) lines.Add($"<color=#fd5>기절</color> ({e.SourceSkillName}) 다음 차례를 건너뜀");
+                else if (e.IsInjury) lines.Add($"<color=#e77>{e.SourceSkillName}</color>: {StatLabel(e)} · 부상");
+            }
+            // 능력치 효과: 기술마다 한 줄 (중첩은 합계)
+            foreach (var g in StatGroups(c))
+            {
+                string name = g.Passive ? $"<color=#eb4>{g.Name}</color>" : g.Name;
+                string stacks = g.Stacks > 1 ? $" ×{g.Stacks}" : "";
+                string tail = g.Passive ? "패시브"
+                    : g.MinRemaining == g.MaxRemaining ? $"{g.MaxRemaining}라운드" : $"{g.MinRemaining}~{g.MaxRemaining}라운드";
+                lines.Add($"{name}{stacks}: {g.Label} · {tail}");
+            }
+            return string.Join("\n", lines);
+        }
+
+        /// <summary>같은 기술(출처)에서 온 능력치 효과 묶음.</summary>
+        private sealed class StatGroup
+        {
+            public string Name;
+            public bool Passive;
+            public bool IsBuff;
+            public int Stacks;
+            public int MinRemaining;
+            public int MaxRemaining;
+            public string Label;
+        }
+
+        /// <summary>
+        /// 능력치 효과(부상 제외)를 출처 기술로 묶는다. 중첩 수 = 한 능력치가 몇 번 걸렸는지의 최댓값.
+        /// 수치는 같은 능력치끼리 더하고, 저항 여러 종은 한 항목으로 묶는다.
+        /// </summary>
+        private static List<StatGroup> StatGroups(Combatant c)
+        {
+            var result = new List<StatGroup>();
+            var stats = c.Effects.All.Where(e => e.Kind == DataKeys.EffectKind.Stat && !e.IsInjury);
+            foreach (var g in stats.GroupBy(e => (e.SourceSkillId, e.IsPassive)))
+            {
+                var list = g.ToList();
+                var byStat = list.GroupBy(e => e.Stat).ToList();
+                var summed = byStat.Select(s => new EffectDefinition
+                    { kind = DataKeys.EffectKind.Stat, stat = s.Key, value = s.Sum(e => e.Value) }).ToList();
+                var resists = summed.Where(d => DataKeys.Stat.IsResist(d.stat)).ToList();
+                var parts = summed.Where(d => !DataKeys.Stat.IsResist(d.stat)).Select(d => SkillResolver.DescribeEffect(d)).ToList();
+                if (resists.Count > 0) parts.Add(SkillResolver.DescribeResists(resists));
+                var first = list[0];
+                result.Add(new StatGroup
+                {
+                    Name = first.SourceSkillName,
+                    Passive = first.IsPassive,
+                    IsBuff = first.Value >= 0 == (first.Stat != DataKeys.Stat.DamageTaken),
+                    Stacks = byStat.Max(s => s.Count()),
+                    MinRemaining = list.Min(e => e.Remaining),
+                    MaxRemaining = list.Max(e => e.Remaining),
+                    Label = string.Join(" · ", parts),
+                });
+            }
+            return result;
         }
 
         private static string StatLabel(ActiveEffect e)
@@ -177,8 +238,18 @@ namespace Grimward.Presentation.Battle
                 sb.Append($"<color=#c9f>{(s.displacement.ranks > 0 ? "밀어내기" : "끌어당기기")} {System.Math.Abs(s.displacement.ranks)}칸</color>" +
                           $" (기본 {s.displacement.chance * 100:0}% − 저항)\n");
             if (s.effects != null)
+            {
+                // 저항 효과(같은 대상·지속)는 한 줄로 묶는다
+                var resists = s.effects.Where(e => e.kind == DataKeys.EffectKind.Stat && DataKeys.Stat.IsResist(e.stat)).ToList();
                 foreach (var e in s.effects)
                 {
+                    if (resists.Contains(e))
+                    {
+                        if (e != resists[0]) continue;
+                        string scale = e.perLevel != 0 ? $" <size=80%><color=#999>(레벨당 +{e.perLevel * 100:0}%p)</color></size>" : "";
+                        sb.Append($"{SkillResolver.DescribeResists(resists, level)}, {e.duration}라운드{scale}\n");
+                        continue;
+                    }
                     string who = e.target == DataKeys.EffectTarget.Self ? "자신: "
                         : e.target == DataKeys.EffectTarget.AllAllies ? "아군 전체: "
                         : s.target == DataKeys.Target.Enemy ? "명중 시: " : "";
@@ -186,8 +257,9 @@ namespace Grimward.Presentation.Battle
                     string length = e.kind == DataKeys.EffectKind.Stun ? "" : $", {e.duration}라운드";
                     string chance = s.target == DataKeys.Target.Enemy && e.target == DataKeys.EffectTarget.Target
                         ? $" <size=80%><color=#999>(기본 {(e.chance > 0 ? e.chance : 1) * 100:0}% − 저항)</color></size>" : "";
-                    sb.Append($"{who}{SkillResolver.DescribeEffect(e)}{length}{doubled}{chance}\n");
+                    sb.Append($"{who}{SkillResolver.DescribeEffect(e, level)}{length}{doubled}{chance}\n");
                 }
+            }
             if (s.injury != null && !string.IsNullOrEmpty(s.injury.injuryId))
                 sb.Append($"<color=#e77>부상: {db.InjuryStageName(s.injury.injuryId, false)} {s.injury.chance * 100:0}%</color>" +
                           " <size=80%><color=#999>(치명타 시 확정)</color></size>\n");

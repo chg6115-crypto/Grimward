@@ -35,8 +35,11 @@ namespace Grimward.Presentation.Battle
             }
         }
 
-        public void Bind(BattleInventory inventory, GameDatabase db, bool canUse, string selectedItem)
+        /// <param name="usableItem">쓸 수 있는 아이템 판정. null이면 전투용(BattleInventory.IsUsableInBattle).</param>
+        public void Bind(BattleInventory inventory, GameDatabase db, bool canUse, string selectedItem,
+            Func<ItemDefinition, bool> usableItem = null)
         {
+            usableItem = usableItem ?? BattleInventory.IsUsableInBattle;
             var filled = inventory.ToSlots(db, slots.Length);
             slotItems.Clear();
             for (int i = 0; i < slots.Length; i++)
@@ -54,7 +57,7 @@ namespace Grimward.Presentation.Battle
                 slotItems.Add(item.id);
                 texts[0].text = item.name;
                 texts[1].text = filled[i].Value.ToString();
-                bool usable = canUse && BattleInventory.IsUsableInBattle(item);
+                bool usable = canUse && usableItem(item);
                 b.interactable = usable;
                 ((Image)b.targetGraphic).color = item.id == selectedItem ? selectedColor : filledColor;
             }

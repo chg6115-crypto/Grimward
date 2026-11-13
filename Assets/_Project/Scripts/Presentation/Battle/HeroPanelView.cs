@@ -73,14 +73,20 @@ namespace Grimward.Presentation.Battle
 
         /// <param name="canAct">이 모험가의 차례이고 입력을 받을 수 있으면 true.</param>
         /// <param name="selected">선택 중인 기술 번호 (−1 없음, 4 = 이동).</param>
-        public void Bind(Combatant hero, GameDatabase db, BattleState battle, bool canAct, int selected)
+        /// <param name="battle">전투 밖(탐험 무대)이면 null — 기술·이동·넘기기는 회색, 칸 번호는 rank로 표시.</param>
+        /// <param name="rank">전투 밖에서 보여 줄 칸 번호.</param>
+        /// <param name="canMoveOutside">전투 밖에서 「이동」(자리 바꾸기)을 켤지.</param>
+        public void Bind(Combatant hero, GameDatabase db, BattleState battle, bool canAct, int selected, int rank = 0,
+            bool canMoveOutside = false)
         {
+            bool outside = battle == null;
+            if (outside) canAct = false;
             if (hero == null) { gameObject.SetActive(false); return; }
             gameObject.SetActive(true);
             nameText.text = hero.Name;
             var cls = db.GetClass(hero.DefinitionId);
             classText.text = $"{cls.name} · {cls.role} · Lv{hero.Level}" +
-                             (hero.IsAlive ? $" · {battle.Formation.RankOf(hero)}번 칸" : " · 사망");
+                             (hero.IsAlive ? $" · {(battle != null ? battle.Formation.RankOf(hero) : rank)}번 칸" : " · 사망");
             statsText.text = BattleText.Stats(hero, db.Balance);
             effectsText.text = BattleText.Effects(hero);
 
@@ -95,7 +101,7 @@ namespace Grimward.Presentation.Battle
                 b.interactable = canAct && battle.CanUseSkill(skill, out _);
                 ((Image)b.targetGraphic).color = i == selected ? selectedButton : normalButton;
             }
-            moveButton.interactable = canAct && (battle.CanMove(-1) || battle.CanMove(1));
+            moveButton.interactable = outside ? canMoveOutside : canAct && (battle.CanMove(-1) || battle.CanMove(1));
             ((Image)moveButton.targetGraphic).color = selected == 4 ? selectedButton : normalButton;
             passButton.interactable = canAct;
         }

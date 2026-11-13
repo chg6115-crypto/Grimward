@@ -33,7 +33,9 @@
       "target": "target",
       "doubledVsType": "",
       "damagePerTurn": 0,
-      "chance": 0
+      "chance": 0,
+      "perLevel": 0,
+      "levelStep": 0
      }
     ],
     "bleedPerTurn": 0,
@@ -50,7 +52,9 @@
       "target": "target",
       "doubledVsType": "",
       "damagePerTurn": 0,
-      "chance": 0
+      "chance": 0,
+      "perLevel": 0,
+      "levelStep": 0
      }
     ],
     "bleedPerTurn": 0,
@@ -520,7 +524,9 @@
      "target": "self",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     },
     {
      "kind": "stat",
@@ -530,7 +536,9 @@
      "target": "allAllies",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     },
     {
      "kind": "stat",
@@ -540,7 +548,9 @@
      "target": "allAllies",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     }
    ],
    "heal": {
@@ -812,7 +822,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     }
    ],
    "heal": {
@@ -877,7 +889,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     }
    ],
    "heal": {
@@ -1639,7 +1653,9 @@
      "target": "target",
      "doubledVsType": "unholy",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0.05,
+     "levelStep": 2
     },
     {
      "kind": "stat",
@@ -1649,7 +1665,93 @@
      "target": "target",
      "doubledVsType": "unholy",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 5,
+     "levelStep": 2
+    },
+    {
+     "kind": "stat",
+     "stat": "armor",
+     "value": 0.1,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0,
+     "chance": 0,
+     "perLevel": 0.05,
+     "levelStep": 2
+    },
+    {
+     "kind": "stat",
+     "stat": "stunResist",
+     "value": 0.05,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0,
+     "chance": 0,
+     "perLevel": 0.05,
+     "levelStep": 1
+    },
+    {
+     "kind": "stat",
+     "stat": "poisonResist",
+     "value": 0.05,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0,
+     "chance": 0,
+     "perLevel": 0.05,
+     "levelStep": 1
+    },
+    {
+     "kind": "stat",
+     "stat": "bleedResist",
+     "value": 0.05,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0,
+     "chance": 0,
+     "perLevel": 0.05,
+     "levelStep": 1
+    },
+    {
+     "kind": "stat",
+     "stat": "burnResist",
+     "value": 0.05,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0,
+     "chance": 0,
+     "perLevel": 0.05,
+     "levelStep": 1
+    },
+    {
+     "kind": "stat",
+     "stat": "debuffResist",
+     "value": 0.05,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0,
+     "chance": 0,
+     "perLevel": 0.05,
+     "levelStep": 1
+    },
+    {
+     "kind": "stat",
+     "stat": "magicResist",
+     "value": 0.05,
+     "duration": 3,
+     "target": "target",
+     "doubledVsType": "",
+     "damagePerTurn": 0,
+     "chance": 0,
+     "perLevel": 0.05,
+     "levelStep": 1
     }
    ],
    "heal": {
@@ -1668,7 +1770,7 @@
    },
    "curePoison": false,
    "cooldown": 0,
-   "description": "3라운드: 피해 +10% · 명중 +10 (불경 상대 2배)",
+   "description": "3라운드: 피해 +10% · 명중 +10 · 방어도 +10%p (Lv3·5마다 +5) · 저항 6종 레벨 × 5%p. 피해·명중은 불경 상대 2배. 중첩됨",
    "kind": "버프",
    "injury": {
     "injuryId": "",
@@ -1956,7 +2058,9 @@
      "target": "self",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     }
    ],
    "heal": {
@@ -2206,7 +2310,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     }
    ],
    "heal": {
@@ -2269,7 +2375,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     },
     {
      "kind": "stat",
@@ -2279,7 +2387,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     }
    ],
    "heal": {
@@ -2466,7 +2576,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     },
     {
      "kind": "stat",
@@ -2476,7 +2588,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     },
     {
      "kind": "stat",
@@ -2486,7 +2600,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     }
    ],
    "heal": {
@@ -2800,7 +2916,9 @@
      "target": "target",
      "doubledVsType": "",
      "damagePerTurn": 0,
-     "chance": 0
+     "chance": 0,
+     "perLevel": 0,
+     "levelStep": 0
     }
    ],
    "heal": {
@@ -3196,7 +3314,9 @@
        "target": "target",
        "doubledVsType": "",
        "damagePerTurn": 0,
-       "chance": 0
+       "chance": 0,
+       "perLevel": 0,
+       "levelStep": 0
       }
      ],
      "ranks": [],
@@ -3253,7 +3373,9 @@
        "target": "target",
        "doubledVsType": "",
        "damagePerTurn": 0,
-       "chance": 0
+       "chance": 0,
+       "perLevel": 0,
+       "levelStep": 0
       }
      ],
      "ranks": [],
@@ -3310,7 +3432,9 @@
        "target": "target",
        "doubledVsType": "",
        "damagePerTurn": 0,
-       "chance": 0
+       "chance": 0,
+       "perLevel": 0,
+       "levelStep": 0
       }
      ],
      "ranks": [],

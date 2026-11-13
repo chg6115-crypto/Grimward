@@ -191,6 +191,8 @@ namespace Grimward.Domain.Data
                     if (e.kind == DataKeys.EffectKind.Stat && !IsKnownStat(e.stat))
                         errors.Add($"{p}: 효과 stat '{e.stat}'");
                     if (e.chance < 0 || e.chance > 1) errors.Add($"{p}: 효과 확률은 0~1");
+                    if (e.levelStep < 0) errors.Add($"{p}: 효과 levelStep 음수");
+                    if (e.perLevel != 0 && e.kind != DataKeys.EffectKind.Stat) errors.Add($"{p}: perLevel은 stat 효과만");
                 }
             if (s.steal && s.target != DataKeys.Target.Enemy) errors.Add($"{p}: 약탈은 적 대상 기술만");
             if (s.variance < 0 || s.variance >= 1) errors.Add($"{p}: 편차는 0 이상 1 미만");
@@ -205,7 +207,7 @@ namespace Grimward.Domain.Data
             stat == DataKeys.Stat.DamagePct || stat == DataKeys.Stat.Accuracy || stat == DataKeys.Stat.Crit ||
             stat == DataKeys.Stat.Dodge || stat == DataKeys.Stat.Speed || stat == DataKeys.Stat.DamageTaken ||
             stat == DataKeys.Stat.MaxHpPct || stat == DataKeys.Stat.Armor || stat == DataKeys.Stat.FormationResist ||
-            stat == DataKeys.Stat.StunResist || stat == DataKeys.Stat.MagicResist;
+            DataKeys.Stat.IsResist(stat);
 
         private void CheckSkillRefs(List<string> errors, string owner, string[] ids)
         {

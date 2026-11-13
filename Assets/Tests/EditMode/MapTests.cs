@@ -227,5 +227,67 @@ namespace Grimward.Tests
             var eta = x.ReturnEstimate();
             Assert.That(eta.MinuteOfDay, Is.EqualTo(8 * 60 + 30 + 30)); // n3→n2 30, n2→n1 30
         }
+
+        [Test]
+        public void Travel_PassesSkippedCurio_ButNotPendingBattle()
+        {
+            // s ─ g(채집) ─ e : 채집을 하지 않고 지나친 g는 지나갈 수 있다
+            var map = new MapDefinition
+            {
+                id = "line", name = "일자", radius = 2, startNode = "s",
+                nodes = new[]
+                {
+                    new MapNodeDefinition { id = "s", name = "입구", q = 0, r = 0 },
+                    new MapNodeDefinition { id = "g", name = "약초", q = 1, r = 0,
+                        events = new[] { new NodeEventDefinition { kind = "gather", item = "herb", amount = 1 } } },
+                    new MapNodeDefinition { id = "e", name = "끝", q = 2, r = 0 },
+                },
+                edges = new[] { new MapEdgeDefinition { a = "s", b = "g" }, new MapEdgeDefinition { a = "g", b = "e" } }
+            };
+            var a = TestData.Hero(db, "swordsman");
+            var x = new Expedition(db, new FakeRandom { DefaultDouble = 0.99 }, new[] { a }, new BattleInventory(), map, new GameTime(1, 360));
+            x.MoveTo("g");                       // 채집은 하지 않는다
+            x.MoveTo("e");
+            Assert.That(x.Map.Node("g").Completed, Is.False);
+            Assert.That(x.Map.Node("g").Passable, Is.True);
+            Assert.That(x.CanTravelTo("s"), Is.True);          // e → g(지나친 골동품) → s
+            Assert.That(x.ReturnEstimate(), Is.Not.Null);
+
+            // 전투가 남은 노드는 여전히 못 지나간다 (테스트 맵: 도주로 n2 전투가 남은 상황과 같음)
+            var y = NewExpedition();
+            y.Map.SetVisionRange(2);
+            y.MoveTo("n4");
+            Assert.That(y.CanTravelTo("n3"), Is.False);        // n4 → n2(안 가 봄·전투 남음) → n3
+        }
+
+        [Test]
+        public void SwapAdjacent_ChangesBattleOrder()
+        {
+            var x = NewExpedition();
+            x.SwapAdjacent(1, 2);
+            Assert.That(x.Party.Select(p => p.Name), Is.EqualTo(new[] { "m", "swordsman" }));
+            Assert.Throws<System.InvalidOperationException>(() => x.SwapAdjacent(1, 3));
+        }
+
+        [Test]
+        public void UseItem_OutsideBattle_HealsAndTreats()
+        {
+            var bag = new BattleInventory(); bag.Add("potion", 1); bag.Add("bandage", 1); bag.Add("herb", 1);
+            var x = NewExpedition(bag: bag);
+            var hero = x.Party[0];
+            Assert.Throws<System.InvalidOperationException>(() => x.UseItem("potion", hero)); // HP 가득 → 효과 없음, 소모 안 함
+            Assert.That(bag.Count("potion"), Is.EqualTo(1));
+
+            int max = hero.CurrentHp;
+            hero.CurrentHp = max - 4;
+            x.UseItem("potion", hero);
+            Assert.That(hero.CurrentHp, Is.EqualTo(max));      // 최대 HP까지만
+            Assert.That(bag.Count("potion"), Is.EqualTo(0));
+
+            hero.Injuries.Add(new InjuryState("shallow_cut", severe: true));
+            x.UseItem("bandage", hero);
+            Assert.That(hero.Injuries.Single().Severe, Is.False); // 중상 → 경상
+            Assert.That(Expedition.IsUsableOutsideBattle(db.GetItem("key")), Is.False);
+        }
     }
 }

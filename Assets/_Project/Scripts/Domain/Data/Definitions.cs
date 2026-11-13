@@ -263,6 +263,18 @@ namespace Grimward.Domain.Data
         public int damagePerTurn;
         /// <summary>적에게 거는 효과의 기본 확률. 실제 = chance − 대상 저항. 0이면 100%.</summary>
         public double chance;
+        /// <summary>레벨이 levelStep만큼 오를 때마다 더하는 값 (stat 효과). 0이면 레벨과 무관.</summary>
+        public double perLevel;
+        /// <summary>perLevel을 더하는 레벨 간격. 1 = 매 레벨, 2 = Lv3·5·7… (0은 1로 본다).</summary>
+        public int levelStep;
+
+        /// <summary>시전자 레벨에서의 수치: value + perLevel × ⌊(레벨 − 1) ÷ levelStep⌋.</summary>
+        public double ValueAt(int level)
+        {
+            if (perLevel == 0) return value;
+            int step = levelStep > 0 ? levelStep : 1;
+            return value + perLevel * ((Math.Max(1, level) - 1) / step);
+        }
     }
 
     [Serializable]

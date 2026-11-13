@@ -70,6 +70,33 @@ namespace Grimward.Domain.Data
             public const string StunResist = "stunResist";
             /// <summary>마법 저항 가산.</summary>
             public const string MagicResist = "magicResist";
+            /// <summary>중독 저항 가산.</summary>
+            public const string PoisonResist = "poisonResist";
+            /// <summary>출혈 저항 가산.</summary>
+            public const string BleedResist = "bleedResist";
+            /// <summary>화상 저항 가산.</summary>
+            public const string BurnResist = "burnResist";
+            /// <summary>약화 저항 가산.</summary>
+            public const string DebuffResist = "debuffResist";
+
+            /// <summary>상태이상 저항 분류(Resist) → 그 저항을 올리는 stat. 버프·아이템·패시브가 같은 stat을 쓴다.</summary>
+            public static string ResistStatOf(string resistKind)
+            {
+                switch (resistKind)
+                {
+                    case Resist.Stun: return StunResist;
+                    case Resist.Poison: return PoisonResist;
+                    case Resist.Bleed: return BleedResist;
+                    case Resist.Burn: return BurnResist;
+                    case Resist.Debuff: return DebuffResist;
+                    default: return null;
+                }
+            }
+
+            /// <summary>저항 계열 stat (상태이상 5종 + 마법).</summary>
+            public static bool IsResist(string stat) =>
+                stat == StunResist || stat == PoisonResist || stat == BleedResist || stat == BurnResist ||
+                stat == DebuffResist || stat == MagicResist;
         }
 
         public static class NodeEvent
